@@ -1,0 +1,9 @@
+docs/token
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+output/
+temp/
+docs/*

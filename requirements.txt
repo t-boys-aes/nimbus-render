@@ -1,0 +1,9 @@
+google-genai
+pydantic
+edge-tts
+moviepy
+requests
+beautifulsoup4
+matplotlib
+python-dotenv
+pandas
