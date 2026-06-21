@@ -19,9 +19,10 @@ from src.script_generator import generate_script
 from src.tts_generator import run_tts
 from src.footage_fetcher import fetch_all_footage
 from src.video_renderer import build_video_segments
+from src.thumbnail_generator import generate_thumbnail
 
 # Define ordered pipeline steps
-PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render"]
+PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render", "thumbnail"]
 
 def load_state() -> dict:
     """Load the pipeline progress state from temp/state.json."""
@@ -63,6 +64,8 @@ def run_step(step_name: str, url_override: str = None) -> bool:
             fetch_all_footage()
         elif step_name == "render":
             build_video_segments()
+        elif step_name == "thumbnail":
+            generate_thumbnail()
             
         logger.info(f"STEP SUCCESS: {step_name.upper()}")
         return True

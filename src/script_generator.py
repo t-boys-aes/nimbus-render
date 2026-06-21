@@ -38,6 +38,7 @@ class VideoScript(BaseModel):
     title: str = Field(description="A clickbait and SEO-friendly title for the video.")
     description: str = Field(description="A short summary of the video with timestamps, credits, and hashtags.")
     tags: List[str] = Field(description="A list of 5-8 SEO tags.")
+    thumbnail_text: str = Field(description="A very short, punchy, high-contrast text overlay for the YouTube thumbnail (3-5 words max, e.g. 'CHIP WAR ECLIPSES US', 'IRAN OUTLAWED?').")
     segments: List[ScriptSegment] = Field(description="The sequential segments of the video. The total script should contain 8-12 segments for a 1-2 minute video.")
 
 def generate_script() -> dict:
@@ -56,6 +57,7 @@ def generate_script() -> dict:
             "title": "The Global Chip War Escalates",
             "description": "An analysis of the global semiconductor supply chain tensions and domestic chip building efforts in the US and Europe. #Geopolitics #Chips #Tech",
             "tags": ["geopolitics", "semiconductors", "chip war", "supply chain", "finance", "technology"],
+            "thumbnail_text": "CHIP WAR ESCALATES",
             "segments": [
                 {
                     "text": "The global semiconductor industry is facing new geopolitical tensions as superpowers race to secure advanced chip supply chains.",
@@ -101,15 +103,21 @@ def generate_script() -> dict:
     {news_data.get('text', '')}
 
     Instructions:
-    1. The script must be in English, professional, analytical, and engaging (style of Vox, Johnny Harris, or Economics Explained).
-    2. Split the naskah into sequential segments. Each segment must have exactly 1-2 spoken sentences.
-    3. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
-    4. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map') and assign a matching visual_keyword:
+    1. The script must be in English, professional, analytical, and write in an engaging documentary storytelling style (similar to Vox, Johnny Harris, or Economics Explained).
+    2. The script MUST follow a clear narrative structure:
+       - Segments 1-2 (Hook/Intro): Hook the viewer with a surprising fact or key question.
+       - Segments 3-5 (Core Explanation & Background): Introduce the core facts, using charts or maps to show historical context.
+       - Segments 6-8 (Geopolitical/Financial Implications): Explain what this means for the global markets and future.
+       - Segments 9-10 (Outro/Conclusion): Wrap up with a final takeaway or thought-provoking question, and invite viewers to subscribe.
+    3. Split the script into sequential segments. Each segment must have exactly 1-2 spoken sentences.
+    4. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
+    5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map') and assign a matching visual_keyword:
        - If 'footage': keyword must be a search term for stock video libraries (e.g. 'inflation', 'semiconductor', 'washington').
        - If 'chart': keyword must represent what data is plotted (e.g. 'inflation rate line chart', 'oil price bar chart').
        - If 'map': keyword must specify which countries/regions to highlight (e.g. 'US, China', 'Europe').
-    5. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
-    6. Double check that all script claims match the source article text.
+    6. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
+    7. Generate a very short, punchy `thumbnail_text` (3-5 words max) highlighting the core tension.
+    8. Double check that all script claims match the source article text.
     """
 
     logger.info("Sending request to Gemini API (gemini-2.5-flash)...")

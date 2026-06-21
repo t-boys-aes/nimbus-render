@@ -73,9 +73,94 @@ async def generate_all_tts(voice=DEFAULT_VOICE):
         
     logger.info("All segments TTS completed successfully.")
 
+def format_srt_time(seconds: float) -> str:
+    """Format seconds into HH:MM:SS,mmm format for SRT."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int(round((seconds - int(seconds)) * 1000))
+    if millis > 999:
+        millis = 999
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+def compile_srt_subtitles(output_srt_path: str):
+    """Compile individual segment word timestamps into a single, unified SRT subtitle file."""
+    if not os.path.exists(SCRIPT_DATA_PATH):
+        logger.error(f"Script data not found: {SCRIPT_DATA_PATH}, cannot compile SRT.")
+        return
+        
+    with open(SCRIPT_DATA_PATH, "r", encoding="utf-8") as f:
+        script_data = json.load(f)
+        
+    segments = script_data.get("segments", [])
+    cumulative_offset = 0.0
+    srt_entries = []
+    srt_index = 1
+    
+    # Import moviepy inside to prevent circular import issues
+    from moviepy import AudioFileClip
+    
+    logger.info("Compiling global subtitles into SRT format...")
+    for i, seg in enumerate(segments):
+        audio_path = os.path.join(TTS_DIR, f"segment_{i}.mp3")
+        timestamp_path = os.path.join(TTS_DIR, f"timestamps_{i}.json")
+        
+        if not os.path.exists(audio_path):
+            continue
+            
+        audio_clip = AudioFileClip(audio_path)
+        audio_duration = audio_clip.duration
+        audio_clip.close()
+        
+        if os.path.exists(timestamp_path):
+            with open(timestamp_path, "r", encoding="utf-8") as f:
+                words = json.load(f)
+                
+            if words:
+                chunk_size = 5
+                for j in range(0, len(words), chunk_size):
+                    chunk = words[j:j+chunk_size]
+                    if not chunk:
+                        continue
+                    start_time = chunk[0]["start"] + cumulative_offset
+                    end_time = chunk[-1]["end"] + cumulative_offset
+                    text_line = " ".join([w["word"] for w in chunk])
+                    
+                    srt_entries.append(
+                        f"{srt_index}\n"
+                        f"{format_srt_time(start_time)} --> {format_srt_time(end_time)}\n"
+                        f"{text_line}\n\n"
+                    )
+                    srt_index += 1
+            else:
+                text = seg.get("text", "")
+                srt_entries.append(
+                    f"{srt_index}\n"
+                    f"{format_srt_time(cumulative_offset)} --> {format_srt_time(cumulative_offset + audio_duration)}\n"
+                    f"{text}\n\n"
+                )
+                srt_index += 1
+        else:
+            text = seg.get("text", "")
+            srt_entries.append(
+                f"{srt_index}\n"
+                f"{format_srt_time(cumulative_offset)} --> {format_srt_time(cumulative_offset + audio_duration)}\n"
+                f"{text}\n\n"
+            )
+            srt_index += 1
+            
+        cumulative_offset += audio_duration
+        
+    os.makedirs(os.path.dirname(output_srt_path), exist_ok=True)
+    with open(output_srt_path, "w", encoding="utf-8") as f:
+        f.writelines(srt_entries)
+        
+    logger.info(f"Successfully compiled global subtitles to: {output_srt_path}")
+
 def run_tts():
     """Sync wrapper to execute async TTS generation."""
     asyncio.run(generate_all_tts())
+    compile_srt_subtitles(os.path.join("output", "final_subtitles.srt"))
 
 if __name__ == "__main__":
     logger.info("Running TTS generator standalone test...")
