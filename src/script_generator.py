@@ -120,21 +120,37 @@ def generate_script() -> dict:
     8. Double check that all script claims match the source article text.
     """
 
-    logger.info("Sending request to Gemini API (gemini-2.5-flash)...")
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=VideoScript,
-                temperature=0.3
+    models_to_try = ["gemini-3.5-flash", "gemini-3.1-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
+    response = None
+    last_error = None
+    selected_model = None
+    
+    for model_name in models_to_try:
+        logger.info(f"Sending request to Gemini API using model: '{model_name}'...")
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=VideoScript,
+                    temperature=0.3
+                )
             )
-        )
+            selected_model = model_name
+            break
+        except Exception as e:
+            logger.warning(f"Failed with model '{model_name}': {e}. Trying fallback...")
+            last_error = e
+            
+    if response is None:
+        logger.error("All Gemini API models failed.")
+        raise last_error
         
+    try:
         # Load structured JSON response
         script_dict = json.loads(response.text)
-        logger.info(f"Script generated successfully. Title: '{script_dict.get('title')}'")
+        logger.info(f"Script generated successfully using model '{selected_model}'. Title: '{script_dict.get('title')}'")
         
         # Save to file
         os.makedirs(TEMP_DIR, exist_ok=True)
@@ -144,7 +160,7 @@ def generate_script() -> dict:
         logger.info(f"Saved script data to {SCRIPT_DATA_PATH}")
         return script_dict
     except Exception as e:
-        logger.error(f"Gemini API request failed: {e}")
+        logger.error(f"Failed to parse or save script: {e}")
         raise e
 
 if __name__ == "__main__":
