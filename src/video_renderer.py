@@ -188,22 +188,29 @@ def make_subtitle_filter(timestamps):
         # Draw word centered near the bottom (karaoke pop effect)
         # Using a solid bounding box + text outline for maximum visibility
         if hasattr(draw, "textbbox"):
-            bbox = draw.textbbox((0, 0), active_word, font=font)
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
+            left, top, right, bottom = draw.textbbox((0, 0), active_word, font=font)
+            w = right - left
+            h = bottom - top
+            x = (VIDEO_WIDTH - w) // 2
+            y = VIDEO_HEIGHT - 220
+            text_x = x - left
+            text_y = y - top
         elif hasattr(draw, "textsize"):
             w, h = draw.textsize(active_word, font=font)
+            x = (VIDEO_WIDTH - w) // 2
+            y = VIDEO_HEIGHT - 220
+            text_x, text_y = x, y
         else:
             w, h = len(active_word) * 35, 70
+            x = (VIDEO_WIDTH - w) // 2
+            y = VIDEO_HEIGHT - 220
+            text_x, text_y = x, y
             
-        x = (VIDEO_WIDTH - w) // 2
-        y = VIDEO_HEIGHT - 220
-        
         # Draw background card for text readability
         draw.rectangle([(x-20, y-10), (x+w+20, y+h+10)], fill=(0, 0, 0, 180))
         
         # Draw text with outline
-        draw.text((x, y), active_word, fill="#ffeb3b", font=font)  # Bright yellow highlighted word
+        draw.text((text_x, text_y), active_word, fill="#ffeb3b", font=font)  # Bright yellow highlighted word
         
         return np.array(img)
     return filter_func

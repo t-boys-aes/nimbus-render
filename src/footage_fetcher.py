@@ -188,6 +188,15 @@ def fetch_all_footage():
         # so we also mark them as placeholders to be built by our Python script.
         if not success or visual_type in ["chart", "map"]:
             create_local_placeholder(i, visual_type, keyword, dest_path)
+        else:
+            # Clean up any leftover placeholder config from previous runs
+            placeholder_path = dest_path + ".placeholder.json"
+            if os.path.exists(placeholder_path):
+                try:
+                    os.remove(placeholder_path)
+                    logger.info(f"Cleaned up old placeholder config: {placeholder_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete old placeholder config: {e}")
             
     # Save attributions JSON
     attributions_path = os.path.join(TEMP_DIR, "footage_attributions.json")
