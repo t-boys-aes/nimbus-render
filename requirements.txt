@@ -7,3 +7,6 @@ beautifulsoup4
 matplotlib
 python-dotenv
 pandas
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2

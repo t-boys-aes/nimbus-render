@@ -39,6 +39,7 @@ class VideoScript(BaseModel):
     description: str = Field(description="A short summary of the video with timestamps, credits, and hashtags.")
     tags: List[str] = Field(description="A list of 5-8 SEO tags.")
     thumbnail_text: str = Field(description="A very short, punchy, high-contrast text overlay for the YouTube thumbnail (3-5 words max, e.g. 'CHIP WAR ECLIPSES US', 'IRAN OUTLAWED?').")
+    music_mood: str = Field(description="The background music mood for the video. MUST be one of: 'suspenseful', 'ambient', 'motivational', or 'corporate'.")
     segments: List[ScriptSegment] = Field(description="The sequential segments of the video. The total script should contain 8-12 segments for a 1-2 minute video.")
 
 def generate_script() -> dict:
@@ -58,6 +59,7 @@ def generate_script() -> dict:
             "description": "An analysis of the global semiconductor supply chain tensions and domestic chip building efforts in the US and Europe. #Geopolitics #Chips #Tech",
             "tags": ["geopolitics", "semiconductors", "chip war", "supply chain", "finance", "technology"],
             "thumbnail_text": "CHIP WAR ESCALATES",
+            "music_mood": "suspenseful",
             "segments": [
                 {
                     "text": "The global semiconductor industry is facing new geopolitical tensions as superpowers race to secure advanced chip supply chains.",
@@ -117,7 +119,8 @@ def generate_script() -> dict:
        - If 'map': keyword must specify which countries/regions to highlight (e.g. 'US, China', 'Europe').
     6. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
     7. Generate a very short, punchy `thumbnail_text` (3-5 words max) highlighting the core tension.
-    8. Double check that all script claims match the source article text.
+    8. Select the most appropriate background music mood for the video: 'suspenseful' (for trade/tech wars, conflict, geopolitical tension), 'ambient' (for neutral analysis, background, geography), 'motivational' (for growth, innovation, economic rise), or 'corporate' (for financial policies, business news).
+    9. Double check that all script claims match the source article text.
     """
 
     models_to_try = ["gemini-3.5-flash", "gemini-3.1-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]

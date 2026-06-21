@@ -24,6 +24,7 @@ ASSETS_DIR = os.path.join(TEMP_DIR, "assets")
 
 BGM_PATH = os.path.join(ASSETS_DIR, "bgm.mp3")
 SFX_PATH = os.path.join(ASSETS_DIR, "transition_sfx.wav")
+SFX_POP_PATH = os.path.join(ASSETS_DIR, "subtle_pop.wav")
 
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
@@ -279,11 +280,16 @@ def build_video_segments():
         # 3. Audio Track
         # For the final segment mix, we will add the SFX overlay if triggered
         segment_audio_clip = audio_clip
-        if seg.get("sfx_trigger", False) and os.path.exists(SFX_PATH):
-            logger.info(f"Segment {i}: Adding transition sound effect (SFX)")
-            sfx_clip = AudioFileClip(SFX_PATH).with_volume_scaled(0.5) # SFX volume at 50%
-            # Combine TTS audio and SFX audio
-            segment_audio_clip = CompositeAudioClip([audio_clip, sfx_clip.with_start(0)])
+        if seg.get("sfx_trigger", False):
+            # Select sound effect based on visual type
+            current_sfx_path = SFX_POP_PATH if visual_type in ["chart", "map"] else SFX_PATH
+            if os.path.exists(current_sfx_path):
+                logger.info(f"Segment {i}: Adding transition sound effect (SFX) from {current_sfx_path} for visual type '{visual_type}'")
+                sfx_clip = AudioFileClip(current_sfx_path).with_volume_scaled(0.5) # SFX volume at 50%
+                # Combine TTS audio and SFX audio
+                segment_audio_clip = CompositeAudioClip([audio_clip, sfx_clip.with_start(0)])
+            else:
+                logger.warning(f"Segment {i}: SFX triggered but file not found: {current_sfx_path}")
             
         base_clip = base_clip.with_audio(segment_audio_clip)
         video_clips.append(base_clip)

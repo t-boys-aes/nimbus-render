@@ -7,14 +7,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Constants
-BGM_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-SFX_URL = "https://remotion.media/whoosh.wav"
+BGM_MOODS = {
+    "suspenseful": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "ambient": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "motivational": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    "corporate": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+}
+SFX_URLS = {
+    "whoosh": "https://remotion.media/whoosh.wav",
+    "pop": "https://remotion.media/mouse-click.wav"
+}
 FONT_URL = "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf"
 
 ASSETS_DIR = os.path.join("temp", "assets")
 BGM_PATH = os.path.join(ASSETS_DIR, "bgm.mp3")
 SFX_PATH = os.path.join(ASSETS_DIR, "transition_sfx.wav")
+SFX_POP_PATH = os.path.join(ASSETS_DIR, "subtle_pop.wav")
 FONT_PATH = os.path.join(ASSETS_DIR, "font.ttf")
+SCRIPT_DATA_PATH = os.path.join("temp", "script_data.json")
 
 def download_file(url: str, dest_path: str, retries: int = 5):
     """Download a file from a URL to a destination path with retry logic."""
@@ -77,21 +87,37 @@ def setup_assets():
     """Ensure all required assets are downloaded and verified."""
     os.makedirs(ASSETS_DIR, exist_ok=True)
     
+    # 1. Determine background music URL based on generated AI mood
+    bgm_url = BGM_MOODS["suspenseful"] # Default fallback
+    if os.path.exists(SCRIPT_DATA_PATH):
+        try:
+            import json
+            with open(SCRIPT_DATA_PATH, "r", encoding="utf-8") as f:
+                script_data = json.load(f)
+            mood = script_data.get("music_mood", "suspenseful").lower()
+            if mood in BGM_MOODS:
+                bgm_url = BGM_MOODS[mood]
+                logger.info(f"Selected BGM URL for mood '{mood}': {bgm_url}")
+        except Exception as e:
+            logger.warning(f"Failed to read script mood, using default BGM. Error: {e}")
+            
     # Download background music
-    download_file(BGM_URL, BGM_PATH)
+    download_file(bgm_url, BGM_PATH)
     
-    # Download sound effects
-    download_file(SFX_URL, SFX_PATH)
+    # 2. Download sound effects (Whoosh & Pop)
+    download_file(SFX_URLS["whoosh"], SFX_PATH)
+    download_file(SFX_URLS["pop"], SFX_POP_PATH)
     
-    # Download custom premium font
+    # 3. Download custom premium font
     download_file(FONT_URL, FONT_PATH)
     
-    # Verify FFmpeg
+    # 4. Verify FFmpeg
     ffmpeg_path = verify_ffmpeg()
     
     return {
         "bgm": BGM_PATH,
         "sfx": SFX_PATH,
+        "sfx_pop": SFX_POP_PATH,
         "font": FONT_PATH,
         "ffmpeg": ffmpeg_path
     }

@@ -35,11 +35,11 @@ def download_video_file(url: str, dest_path: str):
         logger.error(f"Failed to download video file: {e}")
         return False
 
-def fetch_pexels_footage(keyword: str, dest_path: str) -> bool:
-    """Fetch video from Pexels API matching keyword."""
+def fetch_pexels_footage(keyword: str, dest_path: str) -> tuple:
+    """Fetch video from Pexels API matching keyword. Returns (success, author, url)."""
     if not PEXELS_API_KEY:
         logger.warning("PEXELS_API_KEY not configured. Skipping Pexels search.")
-        return False
+        return False, "", ""
 
     logger.info(f"Searching Pexels for keyword: '{keyword}'")
     headers = {"Authorization": PEXELS_API_KEY}
@@ -53,10 +53,12 @@ def fetch_pexels_footage(keyword: str, dest_path: str) -> bool:
         videos = data.get("videos", [])
         if not videos:
             logger.warning(f"No videos found on Pexels for: '{keyword}'")
-            return False
+            return False, "", ""
             
-        # Extract the best video file
+        # Extract the best video file and author info
         best_url = None
+        author_name = "Unknown"
+        author_url = ""
         for video in videos:
             files = video.get("video_files", [])
             # Prefer HD or SD mp4 video with width 1920 or 1280
@@ -66,6 +68,8 @@ def fetch_pexels_footage(keyword: str, dest_path: str) -> bool:
                     w = file.get("width")
                     if w == 1920 or w == 1280:
                         best_url = file.get("link")
+                        author_name = video.get("user", {}).get("name", "Unknown")
+                        author_url = video.get("user", {}).get("url", "")
                         break
             if best_url:
                 break
@@ -75,20 +79,23 @@ def fetch_pexels_footage(keyword: str, dest_path: str) -> bool:
             video_files = videos[0].get("video_files", [])
             if video_files:
                 best_url = video_files[0].get("link")
+                author_name = videos[0].get("user", {}).get("name", "Unknown")
+                author_url = videos[0].get("user", {}).get("url", "")
                 
         if best_url:
-            return download_video_file(best_url, dest_path)
+            success = download_video_file(best_url, dest_path)
+            return success, author_name, author_url
             
-        return False
+        return False, "", ""
     except Exception as e:
         logger.error(f"Pexels search error: {e}")
-        return False
+        return False, "", ""
 
-def fetch_pixabay_footage(keyword: str, dest_path: str) -> bool:
-    """Fetch video from Pixabay API matching keyword."""
+def fetch_pixabay_footage(keyword: str, dest_path: str) -> tuple:
+    """Fetch video from Pixabay API matching keyword. Returns (success, author, url)."""
     if not PIXABAY_API_KEY:
         logger.warning("PIXABAY_API_KEY not configured. Skipping Pixabay search.")
-        return False
+        return False, "", ""
 
     logger.info(f"Searching Pixabay for keyword: '{keyword}'")
     url = f"https://pixabay.com/api/videos/?key={PIXABAY_API_KEY}&q={keyword}&orientation=horizontal"
@@ -101,20 +108,23 @@ def fetch_pixabay_footage(keyword: str, dest_path: str) -> bool:
         hits = data.get("hits", [])
         if not hits:
             logger.warning(f"No videos found on Pixabay for: '{keyword}'")
-            return False
+            return False, "", ""
             
-        # Extract video URL (Pixabay provides multiple size URLs under 'videos')
+        # Extract video URL and author details
         videos_map = hits[0].get("videos", {})
-        # Try medium, large, small
         best_video = videos_map.get("medium") or videos_map.get("large") or videos_map.get("small")
+        author_name = hits[0].get("user", "Unknown")
+        author_url = f"https://pixabay.com/users/{author_name}/" if author_name != "Unknown" else ""
+        
         if best_video:
             video_url = best_video.get("url")
-            return download_video_file(video_url, dest_path)
+            success = download_video_file(video_url, dest_path)
+            return success, author_name, author_url
             
-        return False
+        return False, "", ""
     except Exception as e:
         logger.error(f"Pixabay search error: {e}")
-        return False
+        return False, "", ""
 
 def create_local_placeholder(index: int, visual_type: str, keyword: str, dest_path: str):
     """Save metadata info to create a placeholder clip later in the renderer."""
@@ -141,18 +151,37 @@ def fetch_all_footage():
     segments = script_data.get("segments", [])
     logger.info(f"Starting footage fetcher for {len(segments)} segments...")
     
+    attributions = {}
+    
     for i, seg in enumerate(segments):
         visual_type = seg.get("visual_type", "footage")
         keyword = seg.get("visual_keyword", "business")
         dest_path = os.path.join(FOOTAGE_DIR, f"segment_{i}.mp4")
         
         success = False
+        author = ""
+        url = ""
+        
         if visual_type == "footage":
             # Try Pexels first
-            success = fetch_pexels_footage(keyword, dest_path)
-            # Try Pixabay if Pexels fails
-            if not success:
-                success = fetch_pixabay_footage(keyword, dest_path)
+            success, author, url = fetch_pexels_footage(keyword, dest_path)
+            if success:
+                attributions[f"segment_{i}"] = {
+                    "author": author,
+                    "url": url,
+                    "keyword": keyword,
+                    "source": "Pexels"
+                }
+            else:
+                # Try Pixabay if Pexels fails
+                success, author, url = fetch_pixabay_footage(keyword, dest_path)
+                if success:
+                    attributions[f"segment_{i}"] = {
+                        "author": author,
+                        "url": url,
+                        "keyword": keyword,
+                        "source": "Pixabay"
+                    }
                 
         # If successfully downloaded a clip or it's a chart/map, skip placeholder
         # Note: chart/map visual types are generated dynamically in the renderer,
@@ -160,6 +189,11 @@ def fetch_all_footage():
         if not success or visual_type in ["chart", "map"]:
             create_local_placeholder(i, visual_type, keyword, dest_path)
             
+    # Save attributions JSON
+    attributions_path = os.path.join(TEMP_DIR, "footage_attributions.json")
+    with open(attributions_path, "w", encoding="utf-8") as f:
+        json.dump(attributions, f, indent=4)
+    logger.info(f"Saved footage attributions to {attributions_path}")
     logger.info("Footage fetching phase completed.")
 
 if __name__ == "__main__":
