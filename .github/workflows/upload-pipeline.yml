@@ -78,4 +78,5 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add used_footage_log.json used_news_log.json || echo "Log files not found to add"
           git commit -m "chore(logs): update used footage and news state logs after upload [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin master || echo "Rebase failed"
           git push || echo "Git push failed (possibly no changes or write permission error)"
