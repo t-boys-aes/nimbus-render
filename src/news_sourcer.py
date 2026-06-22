@@ -11,6 +11,30 @@ logger = logging.getLogger(__name__)
 
 TEMP_DIR = "temp"
 NEWS_DATA_PATH = os.path.join(TEMP_DIR, "news_data.json")
+USED_NEWS_LOG_PATH = "used_news_log.json"
+
+def load_used_news_log() -> list:
+    """Load the list of processed article URLs."""
+    if os.path.exists(USED_NEWS_LOG_PATH):
+        try:
+            with open(USED_NEWS_LOG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as e:
+            logger.warning(f"Failed to read used news log: {e}")
+    return []
+
+def save_used_news_log(log_data: list):
+    """Save the list of processed article URLs."""
+    try:
+        # Keep only the last 200 URLs to avoid infinite growth
+        trimmed_log = log_data[-200:]
+        with open(USED_NEWS_LOG_PATH, "w", encoding="utf-8") as f:
+            json.dump(trimmed_log, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to write used news log: {e}")
+
 
 def fetch_trending_articles(query_str="(geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy') sourcelang:english", max_records=10):
     """Query GDELT Doc API to get recent trending articles."""
@@ -171,9 +195,16 @@ def extract_search_query_from_article(title: str, text_snippet: str) -> str:
 def source_news(query_str="(geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy') sourcelang:english", override_url=None):
     """Main entry point to fetch and scrape the best article, saving results to json."""
     os.makedirs(TEMP_DIR, exist_ok=True)
+    used_news = load_used_news_log()
     
     if override_url:
         logger.info(f"Using manual override URL: {override_url}")
+        
+        # Add override url to used news log to ensure consistency
+        if override_url not in used_news:
+            used_news.append(override_url)
+            save_used_news_log(used_news)
+            
         article_text = scrape_article_text(override_url)
         if not article_text:
             raise ValueError(f"Failed to scrape text from manual URL: {override_url}")
@@ -232,6 +263,11 @@ def source_news(query_str="(geopolitics OR macroeconomics OR 'global finance' OR
             title = art.get("title", "")
             url = art.get("url", "")
             
+            # Deduplicate: check if already used
+            if url in used_news:
+                logger.info(f"Skipping already used news article: '{title}' ({url})")
+                continue
+                
             # Scrape full text
             text = scrape_article_text(url)
             if len(text) > 800:
@@ -241,6 +277,10 @@ def source_news(query_str="(geopolitics OR macroeconomics OR 'global finance' OR
                     "url": url,
                     "text": text
                 }
+                # Add to used news log and save immediately
+                used_news.append(url)
+                save_used_news_log(used_news)
+                
                 # Keep track of the index where we stopped so we don't re-scrape the same article
                 start_idx = articles.index(art) + 1
                 remaining_candidates = articles[start_idx:]
@@ -249,14 +289,25 @@ def source_news(query_str="(geopolitics OR macroeconomics OR 'global finance' OR
                 logger.warning(f"Article text too short ({len(text)} chars) for '{title}', trying next candidate...")
                 
         if not main_article:
-            # Fallback if no article could be scraped at all
-            logger.warning("All scraping attempts for main article failed. Using fallback article metadata.")
-            first_art = articles[0]
+            # Check if all candidates were skipped due to deduplication
+            unprocessed_candidates = [art for art in articles if art.get("url") not in used_news]
+            if not unprocessed_candidates:
+                msg = "No new, unprocessed articles found in the news feed. Halting pipeline to prevent duplicate video generation."
+                logger.error(msg)
+                raise ValueError(msg)
+                
+            # Fallback if no article could be scraped at all but we have unprocessed ones
+            logger.warning("All scraping attempts for main article failed. Using fallback article metadata from first unprocessed candidate.")
+            fallback_art = unprocessed_candidates[0]
             main_article = {
-                "title": first_art.get("title", "Geopolitics Update"),
-                "url": first_art.get("url", ""),
-                "text": f"Title: {first_art.get('title', '')}."
+                "title": fallback_art.get("title", "Geopolitics Update"),
+                "url": fallback_art.get("url", ""),
+                "text": f"Title: {fallback_art.get('title', '')}."
             }
+            # Add fallback to used news log and save
+            used_news.append(main_article["url"])
+            save_used_news_log(used_news)
+            
             articles_data = [main_article]
             news_data = {
                 "title": main_article["title"],

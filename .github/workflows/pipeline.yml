@@ -55,11 +55,11 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit and Push Used Footage Log
+      - name: Commit and Push State Logs
         if: steps.check-time.outputs.should_run == 'true' && always()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add used_footage_log.json || echo "No used_footage_log.json found to add"
-          git commit -m "chore(footage): update used footage log [skip ci]" || echo "No changes to commit"
+          git add used_footage_log.json used_news_log.json || echo "Log files not found to add"
+          git commit -m "chore(logs): update used footage and news state logs [skip ci]" || echo "No changes to commit"
           git push || echo "Git push failed (possibly no changes or write permission error)"
