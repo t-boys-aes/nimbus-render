@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 TEMP_DIR = "temp"
 NEWS_DATA_PATH = os.path.join(TEMP_DIR, "news_data.json")
 
-def fetch_trending_articles(query_str="(geopolitics OR finance OR economy) sourcelang:english", max_records=5):
+def fetch_trending_articles(query_str="(geopolitics OR finance OR economy) sourcelang:english", max_records=10):
     """Query GDELT Doc API to get recent trending articles."""
     logger.info(f"Querying GDELT DOC API with query: {query_str}")
     encoded_query = urllib.parse.quote(query_str)
@@ -57,7 +57,7 @@ def fetch_google_news_rss(query_str="geopolitics OR finance OR economy"):
         items = root.findall(".//item")
         
         articles = []
-        for item in items[:5]:
+        for item in items[:12]:
             title_el = item.find("title")
             link_el = item.find("link")
             title = title_el.text if title_el is not None else "News Update"
@@ -76,6 +76,22 @@ def fetch_google_news_rss(query_str="geopolitics OR finance OR economy"):
 def scrape_article_text(url: str) -> str:
     """Scrape the full text of an article, removing HTML tags and scripts."""
     logger.info(f"Attempting to scrape article: {url}")
+    
+    # Decode Google News URL if needed
+    if "news.google.com" in url:
+        logger.info(f"Detected Google News URL, attempting to decode: {url}")
+        try:
+            from googlenewsdecoder import gnewsdecoder
+            decoded = gnewsdecoder(url)
+            if decoded.get("status"):
+                decoded_url = decoded.get("decoded_url")
+                logger.info(f"Successfully decoded Google News URL to: {decoded_url}")
+                url = decoded_url
+            else:
+                logger.warning(f"Failed to decode Google News URL using library: {decoded.get('message')}")
+        except Exception as e:
+            logger.warning(f"Could not import or use googlenewsdecoder: {e}")
+            
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -118,7 +134,12 @@ def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:englis
             "title": "Manual Override Article",
             "url": override_url,
             "text": article_text,
-            "source": "manual"
+            "source": "manual",
+            "articles": [{
+                "title": "Manual Override Article",
+                "url": override_url,
+                "text": article_text
+            }]
         }
     else:
         articles = fetch_trending_articles(query_str)
@@ -130,7 +151,7 @@ def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:englis
         if not articles:
             raise ValueError("No articles returned from GDELT or Google News RSS.")
             
-        news_data = None
+        articles_data = []
         for art in articles:
             title = art.get("title", "")
             url = art.get("url", "")
@@ -138,20 +159,28 @@ def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:englis
             # Scrape full text
             text = scrape_article_text(url)
             
-            # Require at least 800 characters of content to make a good script
+            # Require at least 800 characters of content to make a good script segment
             if len(text) > 800:
                 logger.info(f"Successfully sourced article: '{title}' ({len(text)} characters)")
-                news_data = {
+                articles_data.append({
                     "title": title,
                     "url": url,
-                    "text": text,
-                    "source": source_name
-                }
-                break
+                    "text": text
+                })
+                if len(articles_data) >= 3:  # Limit to top 3 relevant articles
+                    break
             else:
-                logger.warning(f"Article text too short ({len(text)} chars), trying next...")
+                logger.warning(f"Article text too short ({len(text)} chars) for '{title}', trying next...")
                 
-        if not news_data:
+        if articles_data:
+            news_data = {
+                "title": articles_data[0]["title"],
+                "url": articles_data[0]["url"],
+                "text": articles_data[0]["text"],
+                "source": source_name,
+                "articles": articles_data
+            }
+        else:
             # Fallback: if all scrapes fail, use the first article's title/metadata
             logger.warning("All scraping attempts failed or were too short. Using fallback article metadata.")
             first_art = articles[0]
@@ -159,7 +188,12 @@ def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:englis
                 "title": first_art.get("title", "Geopolitics Update"),
                 "url": first_art.get("url", ""),
                 "text": f"Title: {first_art.get('title', '')}.",
-                "source": f"{source_name}_fallback"
+                "source": f"{source_name}_fallback",
+                "articles": [{
+                    "title": first_art.get("title", "Geopolitics Update"),
+                    "url": first_art.get("url", ""),
+                    "text": f"Title: {first_art.get('title', '')}."
+                }]
             }
             
     with open(NEWS_DATA_PATH, "w", encoding="utf-8") as f:

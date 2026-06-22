@@ -191,13 +191,28 @@ def generate_script() -> dict:
     except Exception as e:
         logger.warning(f"Could not fetch SEO suggestions: {e}")
 
+    # Compile context from multiple sourced articles
+    articles_list = news_data.get("articles", [])
+    articles_context = ""
+    if articles_list:
+        for idx, art in enumerate(articles_list):
+            articles_context += f"--- SOURCE ARTICLE {idx + 1} ---\n"
+            articles_context += f"Title: {art.get('title', '')}\n"
+            articles_context += f"URL: {art.get('url', '')}\n"
+            articles_context += f"Content:\n{art.get('text', '')}\n\n"
+    else:
+        # Fallback to single text
+        articles_context += f"--- SOURCE ARTICLE 1 ---\n"
+        articles_context += f"Title: {news_data.get('title', '')}\n"
+        articles_context += f"URL: {news_data.get('url', '')}\n"
+        articles_context += f"Content:\n{news_data.get('text', '')}\n"
+
     # Prompt design for grounding
     prompt = f"""
-    You are an expert geopolitical and finance video scriptwriter. Your goal is to write a highly engaging and educational video script based ONLY on the facts provided in the source article below. Do not invent new facts, make ungrounded claims, or exaggerate.
+    You are an expert geopolitical and finance video scriptwriter. Your goal is to write a highly engaging and educational video script by synthesizing facts and analysis from ALL the provided source articles below. Do not invent new facts, make ungrounded claims, or exaggerate. Every claim in the script MUST be supported by at least one of these source articles.
 
-    Source Article Title: {news_data.get('title', 'Geopolitical News')}
-    Source Article Content:
-    {news_data.get('text', '')}
+    Source Articles Context:
+    {articles_context}
 
     Live Google Search Trends/Keywords related to this topic:
     {json.dumps(seo_keywords) if seo_keywords else "N/A"}
@@ -249,7 +264,7 @@ def generate_script() -> dict:
     11. Double check that all script claims match the source article text.
     """
 
-    models_to_try = ["gemini-3.5-flash", "gemini-3.1-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     response = None
     last_error = None
     selected_model = None
