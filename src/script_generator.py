@@ -267,7 +267,13 @@ def generate_script() -> dict:
     11. Double check that all script claims match the source article text.
     """
 
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    models_to_try = [
+        "gemini-3.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash"
+    ]
     response = None
     last_error = None
     selected_model = None
