@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 TEMP_DIR = "temp"
 NEWS_DATA_PATH = os.path.join(TEMP_DIR, "news_data.json")
 
-def fetch_trending_articles(query_str="(geopolitics OR finance OR economy) sourcelang:english", max_records=10):
+def fetch_trending_articles(query_str="(geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy') sourcelang:english", max_records=10):
     """Query GDELT Doc API to get recent trending articles."""
     logger.info(f"Querying GDELT DOC API with query: {query_str}")
     encoded_query = urllib.parse.quote(query_str)
@@ -37,7 +37,7 @@ def fetch_trending_articles(query_str="(geopolitics OR finance OR economy) sourc
         logger.error(f"Error fetching from GDELT: {e}")
         return []
 
-def fetch_google_news_rss(query_str="geopolitics OR finance OR economy"):
+def fetch_google_news_rss(query_str="geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy'"):
     """Query Google News RSS to get recent articles."""
     logger.info("Querying Google News RSS as fallback...")
     import xml.etree.ElementTree as ET
@@ -120,7 +120,55 @@ def scrape_article_text(url: str) -> str:
         logger.warning(f"Failed to scrape {url}: {e}")
         return ""
 
-def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:english", override_url=None):
+def extract_search_query_from_article(title: str, text_snippet: str) -> str:
+    """Use Gemini to extract a highly focused search query for finding related articles."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or api_key == "" or "your_gemini_api_key" in api_key:
+        import re
+        # Basic fallback: extract main words (capitalized or significant words)
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', title)
+        # remove common filler words
+        fillers = {'with', 'from', 'that', 'this', 'have', 'about', 'news', 'update', 'economy', 'geopolitics', 'finance'}
+        keywords = [w for w in words if w.lower() not in fillers]
+        if len(keywords) >= 2:
+            return " ".join(keywords[:3])
+        return "geopolitics"
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        prompt = f"""
+        Analyze this news article title and text snippet. Generate a focused, short search query (2-4 words max) that can be used on Google News to find articles that are directly related to, or expand on, the exact same event, topic, or conflict.
+        
+        CRITICAL RULES:
+        1. Do not use generic terms like 'geopolitics' or 'news'.
+        2. Identify and ignore metaphorical, idiomatic, or figurative language in the title (e.g., if the title says 'explosion of debt' or 'running off a cliff', do NOT search for physical 'explosion' or 'cliff'. Search for 'US debt crisis' or 'consumer credit' instead).
+        3. Focus only on the core countries, entities, financial indicators, or geopolitical events.
+        
+        Article Title: {title}
+        Snippet: {text_snippet[:400]}
+        
+        Respond ONLY with the raw search query string. Do not include any explanation, quotes, or markdown.
+        Example output: US Iran sanctions drones
+        """
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        query = response.text.strip().strip('"').strip("'")
+        logger.info(f"Extracted focused search query for related news: '{query}'")
+        return query
+    except Exception as e:
+        logger.warning(f"Failed to extract search query using Gemini: {e}")
+        # Basic fallback
+        import re
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', title)
+        keywords = [w for w in words if w.lower() not in {'with', 'from', 'that', 'this', 'have', 'about'}]
+        if len(keywords) >= 2:
+            return " ".join(keywords[:3])
+        return "geopolitics"
+
+def source_news(query_str="(geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy') sourcelang:english", override_url=None):
     """Main entry point to fetch and scrape the best article, saving results to json."""
     os.makedirs(TEMP_DIR, exist_ok=True)
     
@@ -130,70 +178,141 @@ def source_news(query_str="(geopolitics OR finance OR economy) sourcelang:englis
         if not article_text:
             raise ValueError(f"Failed to scrape text from manual URL: {override_url}")
         
-        news_data = {
+        main_article = {
             "title": "Manual Override Article",
             "url": override_url,
-            "text": article_text,
-            "source": "manual",
-            "articles": [{
-                "title": "Manual Override Article",
-                "url": override_url,
-                "text": article_text
-            }]
+            "text": article_text
+        }
+        articles_data = [main_article]
+        source_name = "manual"
+        
+        # Try to find related articles even for manual override to make it rich
+        focused_query = extract_search_query_from_article("Manual Override", article_text)
+        logger.info(f"Searching related news for manual override using query: '{focused_query}'")
+        related_articles = fetch_google_news_rss(focused_query)
+        
+        for art in related_articles:
+            url = art.get("url", "")
+            if url == override_url:
+                continue
+            text = scrape_article_text(url)
+            if len(text) > 800:
+                logger.info(f"Sourced related article for manual override: '{art.get('title')}'")
+                articles_data.append({
+                    "title": art.get("title", ""),
+                    "url": url,
+                    "text": text
+                })
+                if len(articles_data) >= 3:
+                    break
+                    
+        news_data = {
+            "title": main_article["title"],
+            "url": main_article["url"],
+            "text": main_article["text"],
+            "source": source_name,
+            "articles": articles_data
         }
     else:
+        # Phase 1: Find the main article (from general geopolitics/finance feed)
+        logger.info("Phase 1: Sourcing the main geopolitical/financial article...")
         articles = fetch_trending_articles(query_str)
         source_name = "GDELT"
         if not articles:
-            articles = fetch_google_news_rss("geopolitics OR finance OR economy")
+            articles = fetch_google_news_rss("geopolitics OR macroeconomics OR 'global finance' OR 'foreign policy'")
             source_name = "Google News RSS"
             
         if not articles:
             raise ValueError("No articles returned from GDELT or Google News RSS.")
             
-        articles_data = []
+        main_article = None
+        remaining_candidates = []
+        
         for art in articles:
             title = art.get("title", "")
             url = art.get("url", "")
             
             # Scrape full text
             text = scrape_article_text(url)
-            
-            # Require at least 800 characters of content to make a good script segment
             if len(text) > 800:
-                logger.info(f"Successfully sourced article: '{title}' ({len(text)} characters)")
-                articles_data.append({
+                logger.info(f"Successfully sourced Main Article: '{title}' ({len(text)} characters)")
+                main_article = {
                     "title": title,
                     "url": url,
                     "text": text
-                })
-                if len(articles_data) >= 3:  # Limit to top 3 relevant articles
-                    break
+                }
+                # Keep track of the index where we stopped so we don't re-scrape the same article
+                start_idx = articles.index(art) + 1
+                remaining_candidates = articles[start_idx:]
+                break
             else:
-                logger.warning(f"Article text too short ({len(text)} chars) for '{title}', trying next...")
+                logger.warning(f"Article text too short ({len(text)} chars) for '{title}', trying next candidate...")
                 
-        if articles_data:
+        if not main_article:
+            # Fallback if no article could be scraped at all
+            logger.warning("All scraping attempts for main article failed. Using fallback article metadata.")
+            first_art = articles[0]
+            main_article = {
+                "title": first_art.get("title", "Geopolitics Update"),
+                "url": first_art.get("url", ""),
+                "text": f"Title: {first_art.get('title', '')}."
+            }
+            articles_data = [main_article]
             news_data = {
-                "title": articles_data[0]["title"],
-                "url": articles_data[0]["url"],
-                "text": articles_data[0]["text"],
-                "source": source_name,
+                "title": main_article["title"],
+                "url": main_article["url"],
+                "text": main_article["text"],
+                "source": f"{source_name}_fallback",
                 "articles": articles_data
             }
         else:
-            # Fallback: if all scrapes fail, use the first article's title/metadata
-            logger.warning("All scraping attempts failed or were too short. Using fallback article metadata.")
-            first_art = articles[0]
+            articles_data = [main_article]
+            
+            # Phase 2: Extract focused query from main article
+            logger.info("Phase 2: Extracting focused search terms from the Main Article...")
+            focused_query = extract_search_query_from_article(main_article["title"], main_article["text"])
+            
+            # Phase 3: Fetch related articles using the focused query
+            logger.info(f"Phase 3: Fetching related articles using focused query: '{focused_query}'")
+            related_candidates = fetch_trending_articles(focused_query)
+            if not related_candidates:
+                related_candidates = fetch_google_news_rss(focused_query)
+                
+            # Phase 4: Scrape related articles
+            logger.info("Phase 4: Scraping related articles to build narrative depth...")
+            # We combine the focused query results first, then fallback to original feed if not enough
+            all_candidates = related_candidates + remaining_candidates
+            
+            # Remove duplicates based on URL
+            seen_urls = {main_article["url"]}
+            
+            for art in all_candidates:
+                url = art.get("url", "")
+                if url in seen_urls or not url:
+                    continue
+                seen_urls.add(url)
+                
+                title = art.get("title", "")
+                text = scrape_article_text(url)
+                
+                if len(text) > 800:
+                    logger.info(f"Successfully sourced related article: '{title}' ({len(text)} characters)")
+                    articles_data.append({
+                        "title": title,
+                        "url": url,
+                        "text": text
+                    })
+                    if len(articles_data) >= 3:
+                        break
+                else:
+                    logger.warning(f"Related article text too short ({len(text)} chars) for '{title}', trying next...")
+            
             news_data = {
-                "title": first_art.get("title", "Geopolitics Update"),
-                "url": first_art.get("url", ""),
-                "text": f"Title: {first_art.get('title', '')}.",
-                "source": f"{source_name}_fallback",
-                "articles": [{
-                    "title": first_art.get("title", "Geopolitics Update"),
-                    "url": first_art.get("url", ""),
-                    "text": f"Title: {first_art.get('title', '')}."
-                }]
+                "title": main_article["title"],
+                "url": main_article["url"],
+                "text": main_article["text"],
+                "source": source_name,
+                "articles": articles_data
             }
             
     with open(NEWS_DATA_PATH, "w", encoding="utf-8") as f:
