@@ -143,13 +143,21 @@ def generate_script() -> dict:
     Instructions:
     1. The script must be in English, professional, analytical, and write in an engaging documentary storytelling style (similar to Vox, Johnny Harris, or Economics Explained).
     2. The script MUST follow a clear narrative structure:
-       - Segment 1 (Signature Opener): You MUST start the spoken script with this exact signature opener (replace [topic] with the main subject of the news, e.g. "the global chip war", "sanctions on Iran"):
-         "This is The Strategic Brief — here's what you need to know about [topic], and why it matters."
+       - Segment 1 (Signature Opener): Choose one of these signature openers, replacing [topic] with the main subject of the news (e.g. "the global chip war", "sanctions on Iran"):
+         * "This is The Strategic Brief — here's what you need to know about [topic], and why it matters."
+         * "Welcome to The Strategic Brief. Today, we're unpacking [topic], and what it means for the global order."
+         * "You're listening to The Strategic Brief — here is the story behind [topic], and why you should pay attention."
+         * "On today's Strategic Brief: we dive into [topic] and why this development matters right now."
+         Please select the opener that best fits the article.
        - Segments 2-3 (Hook/Intro continued): Hook the viewer further with a surprising fact or key question.
        - Segments 4-6 (Core Explanation & Background): Introduce the core facts, using charts or maps to show historical context.
        - Segments 7-8 (Geopolitical/Financial Implications): Explain what this means for the global markets and future.
-       - Last Segment (Signature Outro & CTA): You MUST end the spoken script with this exact signature outro line to encourage subscriptions:
-         "That's today's brief. If you want to stay ahead of the stories shaping global power and markets, subscribe to The Strategic Brief."
+       - Last Segment (Signature Outro & CTA): Choose one of these signature outros to encourage subscriptions:
+         * "That's today's brief. If you want to stay ahead of the stories shaping global power and markets, subscribe to The Strategic Brief."
+         * "That concludes today's brief. To make sure you don't miss the next story shaping global finance and power, subscribe to The Strategic Brief."
+         * "And that's the brief for today. If you want to stay informed on the geopolitical forces driving global markets, hit subscribe to The Strategic Brief."
+         * "Thank you for listening to today's brief. Subscribe to The Strategic Brief to keep your finger on the pulse of global power and market dynamics."
+         Please select the outro that best matches the final tone of the video.
     3. Split the script into sequential segments. Each segment must have exactly 1-2 spoken sentences.
     4. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
     5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map', 'clipping', 'quote', 'stat', 'timeline') and assign a matching visual_keyword:

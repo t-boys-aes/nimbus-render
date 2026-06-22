@@ -21,6 +21,14 @@ METADATA_PATH = os.path.join("temp", "youtube_metadata.json")
 
 def get_youtube_client():
     """Retrieve an authenticated YouTube API client using refresh token configuration."""
+    # Check if upload should be skipped
+    skip_upload = os.environ.get("SKIP_YOUTUBE_UPLOAD", "False").lower() in ("true", "1", "yes")
+    if skip_upload:
+        logger.info(
+            "SKIP_YOUTUBE_UPLOAD is enabled. Skipping real YouTube upload. (Simulated run)"
+        )
+        return None
+
     client_id = os.environ.get("YOUTUBE_CLIENT_ID")
     client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
     refresh_token = os.environ.get("YOUTUBE_REFRESH_TOKEN")

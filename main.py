@@ -22,9 +22,12 @@ from src.video_renderer import build_video_segments
 from src.thumbnail_generator import generate_thumbnail
 from src.metadata_generator import generate_youtube_metadata
 from src.youtube_uploader import upload_video
+from src.drive_storage import upload_to_drive
+from src.sheets_logger import log_to_sheets
+from src.telegram_notifier import notify_pipeline_status
 
 # Define ordered pipeline steps
-PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render", "thumbnail", "metadata"]
+PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render", "thumbnail", "metadata", "drive", "sheets", "upload"]
 
 def load_state() -> dict:
     """Load the pipeline progress state from temp/state.json."""
@@ -71,7 +74,28 @@ def run_step(step_name: str, url_override: str = None) -> bool:
         elif step_name == "metadata":
             generate_youtube_metadata()
         elif step_name == "upload":
-            upload_video()
+            video_id = upload_video()
+            youtube_link = f"https://youtu.be/{video_id}"
+            with open(os.path.join(TEMP_DIR, "youtube_link.txt"), "w") as f:
+                f.write(youtube_link)
+        elif step_name == "drive":
+            gdrive_link = upload_to_drive()
+            with open(os.path.join(TEMP_DIR, "gdrive_link.txt"), "w") as f:
+                f.write(gdrive_link)
+        elif step_name == "sheets":
+            gdrive_link = ""
+            gdrive_link_path = os.path.join(TEMP_DIR, "gdrive_link.txt")
+            if os.path.exists(gdrive_link_path):
+                with open(gdrive_link_path, "r") as f:
+                    gdrive_link = f.read().strip()
+                    
+            youtube_link = ""
+            youtube_link_path = os.path.join(TEMP_DIR, "youtube_link.txt")
+            if os.path.exists(youtube_link_path):
+                with open(youtube_link_path, "r") as f:
+                    youtube_link = f.read().strip()
+                    
+            log_to_sheets(youtube_link=youtube_link, gdrive_link=gdrive_link, status="success")
             
         logger.info(f"STEP SUCCESS: {step_name.upper()}")
         return True
@@ -90,6 +114,9 @@ def main():
     
     state = load_state()
     
+    gdrive_link_path = os.path.join(TEMP_DIR, "gdrive_link.txt")
+    youtube_link_path = os.path.join(TEMP_DIR, "youtube_link.txt")
+    
     # 1. Run single step override
     if args.step:
         logger.info(f"Single step manual execution triggered for: '{args.step}'")
@@ -105,24 +132,99 @@ def main():
         logger.info("Force flag set. Resetting pipeline state and running all steps.")
         state = {step: "pending" for step in PIPELINE_STEPS}
         save_state(state)
+        # Clear link files
+        for p in [gdrive_link_path, youtube_link_path]:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except:
+                    pass
         
-    # 3. Main pipeline loop
-    for step in PIPELINE_STEPS:
-        # If resuming and step was already successful, skip it
-        if args.resume and state.get(step) == "success":
-            logger.info(f"Skipping already completed step: {step.upper()}")
-            continue
+    # 3. Main pipeline loop wrapped in error handling for notifications
+    error_occurred = False
+    error_msg = ""
+    
+    try:
+        for step in PIPELINE_STEPS:
+            # If resuming and step was already successful, skip it
+            if args.resume and state.get(step) == "success":
+                logger.info(f"Skipping already completed step: {step.upper()}")
+                continue
+                
+            success = run_step(step, url_override=args.url)
+            state[step] = "success" if success else "failed"
+            save_state(state)
             
-        success = run_step(step, url_override=args.url)
-        state[step] = "success" if success else "failed"
-        save_state(state)
+            if not success:
+                error_occurred = True
+                error_msg = f"Pipeline execution halted at step '{step.upper()}'."
+                break
+    except Exception as e:
+        error_occurred = True
+        error_msg = str(e)
+        logger.error(f"Pipeline crashed with exception: {e}", exc_info=True)
         
-        if not success:
-            logger.error(f"Pipeline execution halted at step '{step.upper()}'. Repair the issue and run with --resume.")
-            sys.exit(1)
+    # Read metadata values for notification
+    video_title = "Untitled Nimbus Video"
+    article_url = ""
+    metadata_path = os.path.join(TEMP_DIR, "youtube_metadata.json")
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                video_title = meta.get("title", video_title)
+        except:
+            pass
             
+    news_data_path = os.path.join(TEMP_DIR, "news_data.json")
+    if os.path.exists(news_data_path):
+        try:
+            with open(news_data_path, "r", encoding="utf-8") as f:
+                news = json.load(f)
+                article_url = news.get("url", "")
+        except:
+            pass
+            
+    # Read links
+    gdrive_link = ""
+    if os.path.exists(gdrive_link_path):
+        try:
+            with open(gdrive_link_path, "r") as f:
+                gdrive_link = f.read().strip()
+        except:
+            pass
+            
+    youtube_link = ""
+    if os.path.exists(youtube_link_path):
+        try:
+            with open(youtube_link_path, "r") as f:
+                youtube_link = f.read().strip()
+        except:
+            pass
+            
+    # If failure occurred, log to sheet as failed if sheets setup exists
+    if error_occurred:
+        try:
+            log_to_sheets(youtube_link=youtube_link, gdrive_link=gdrive_link, status="failed")
+        except:
+            pass
+
+    # Send final report to Telegram
+    notify_pipeline_status(
+        pipeline_state=state,
+        video_title=video_title,
+        article_url=article_url,
+        youtube_link=youtube_link,
+        gdrive_link=gdrive_link,
+        error_message=error_msg if error_occurred else ""
+    )
+    
+    if error_occurred:
+        logger.error(f"Pipeline execution halted with errors: {error_msg}")
+        sys.exit(1)
+        
     logger.info("==================================================")
-    logger.info(" PIPELINE COMPLETED SUCCESSFULLY! VIDEO READY.")
+    logger.info(" PIPELINE COMPLETED SUCCESSFULLY! RUN SUMMARY SENT.")
     logger.info("==================================================")
 
 if __name__ == "__main__":

@@ -25,11 +25,34 @@ client_config = {
     }
 }
 
-# Scopes required for video upload and thumbnail/caption management
-scopes = [
-    "https://www.googleapis.com/auth/youtube.upload",
-    "https://www.googleapis.com/auth/youtube.force-ssl"
-]
+# Selection menu for scope generation
+print("Pilih tipe token yang ingin Anda generate:")
+print("1. KEDUA LAYANAN (YouTube + Drive + Sheets) -> Gunakan jika channel Anda BUKAN Brand Account")
+print("2. HANYA YOUTUBE (Pilih ini lalu pilih Channel 'The Strategic Brief' saat login)")
+print("3. HANYA GOOGLE DRIVE & SHEETS (Pilih ini lalu pilih email utama 'artisaneternal@gmail.com' saat login)")
+
+choice = input("Pilihan Anda (1/2/3): ").strip()
+
+if choice == "2":
+    scopes = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+    ]
+    token_name = "YOUTUBE_REFRESH_TOKEN"
+elif choice == "3":
+    scopes = [
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/spreadsheets"
+    ]
+    token_name = "GDRIVE_REFRESH_TOKEN"
+else:
+    scopes = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/spreadsheets"
+    ]
+    token_name = "YOUTUBE_REFRESH_TOKEN"
 
 print("==================================================")
 print("     NIMBUS YOUTUBE REFRESH TOKEN GENERATOR       ")
@@ -55,10 +78,10 @@ try:
     print("\n" + "="*50)
     print("OTORISASI BERHASIL!")
     print("="*50)
-    print(f"YouTube Refresh Token Anda adalah:\n\n{credentials.refresh_token}\n")
+    print(f"Refresh Token Anda adalah:\n\n{credentials.refresh_token}\n")
     print("="*50)
     print("Salin token di atas dan tempel di file .env pada baris:")
-    print("YOUTUBE_REFRESH_TOKEN=<token_di_atas>")
+    print(f"{token_name}=<token_di_atas>")
     print("="*50)
 except Exception as e:
     print(f"\nGagal mendapatkan refresh token: {e}")

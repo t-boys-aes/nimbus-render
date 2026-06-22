@@ -25,6 +25,9 @@ ASSETS_DIR = os.path.join(TEMP_DIR, "assets")
 BGM_PATH = os.path.join(ASSETS_DIR, "bgm.mp3")
 SFX_PATH = os.path.join(ASSETS_DIR, "transition_sfx.wav")
 SFX_POP_PATH = os.path.join(ASSETS_DIR, "subtle_pop.wav")
+SFX_PAGE_PATH = os.path.join(ASSETS_DIR, "page_flip.wav")
+SFX_CLICK_PATH = os.path.join(ASSETS_DIR, "click_sound.wav")
+SFX_WHOOSH_PATH = os.path.join(ASSETS_DIR, "whoosh_sfx.wav")
 
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
@@ -707,8 +710,18 @@ def build_video_segments():
         # For the final segment mix, we will add the SFX overlay if triggered
         segment_audio_clip = audio_clip
         if seg.get("sfx_trigger", False):
-            # Select sound effect based on visual type
-            current_sfx_path = SFX_POP_PATH if visual_type in ["chart", "map"] else SFX_PATH
+            # Select sound effect based on visual type with fallback
+            if visual_type in ["chart", "map"]:
+                current_sfx_path = SFX_POP_PATH if os.path.exists(SFX_POP_PATH) else SFX_PATH
+            elif visual_type == "clipping":
+                current_sfx_path = SFX_PAGE_PATH if os.path.exists(SFX_PAGE_PATH) else SFX_PATH
+            elif visual_type == "quote":
+                current_sfx_path = SFX_CLICK_PATH if os.path.exists(SFX_CLICK_PATH) else SFX_PATH
+            elif visual_type == "stat":
+                current_sfx_path = SFX_WHOOSH_PATH if os.path.exists(SFX_WHOOSH_PATH) else SFX_PATH
+            else:
+                current_sfx_path = SFX_PATH
+
             if os.path.exists(current_sfx_path):
                 logger.info(f"Segment {i}: Adding transition sound effect (SFX) from {current_sfx_path} for visual type '{visual_type}'")
                 sfx_clip = AudioFileClip(current_sfx_path).with_volume_scaled(0.5) # SFX volume at 50%
@@ -727,9 +740,13 @@ def build_video_segments():
     final_video = concatenate_videoclips(video_clips, method="compose")
     
     # 4. Background Music (BGM) with Ducking
-    if os.path.exists(BGM_PATH):
-        logger.info(f"Mixing background music: {BGM_PATH}")
-        bgm_clip = AudioFileClip(BGM_PATH)
+    music_mood = script_data.get("music_mood", "suspenseful")
+    mood_bgm_path = os.path.join(ASSETS_DIR, f"bgm_{music_mood}.mp3")
+    target_bgm_path = mood_bgm_path if os.path.exists(mood_bgm_path) else BGM_PATH
+    
+    if os.path.exists(target_bgm_path):
+        logger.info(f"Mixing background music: {target_bgm_path} (mood: {music_mood})")
+        bgm_clip = AudioFileClip(target_bgm_path)
         # Loop BGM to match final video length
         bgm_clip = bgm_clip.with_effects([afx.AudioLoop(duration=final_video.duration)])
         # Lower BGM volume (ducking base level)
