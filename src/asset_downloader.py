@@ -18,12 +18,14 @@ SFX_URLS = {
     "pop": "https://remotion.media/mouse-click.wav"
 }
 FONT_URL = "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf"
+GEOJSON_URL = "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson"
 
 ASSETS_DIR = os.path.join("temp", "assets")
 BGM_PATH = os.path.join(ASSETS_DIR, "bgm.mp3")
 SFX_PATH = os.path.join(ASSETS_DIR, "transition_sfx.wav")
 SFX_POP_PATH = os.path.join(ASSETS_DIR, "subtle_pop.wav")
 FONT_PATH = os.path.join(ASSETS_DIR, "font.ttf")
+GEOJSON_PATH = os.path.join(ASSETS_DIR, "world.geo.json")
 SCRIPT_DATA_PATH = os.path.join("temp", "script_data.json")
 
 def download_file(url: str, dest_path: str, retries: int = 5):
@@ -111,7 +113,10 @@ def setup_assets():
     # 3. Download custom premium font
     download_file(FONT_URL, FONT_PATH)
     
-    # 4. Verify FFmpeg
+    # 4. Download world GeoJSON map
+    download_file(GEOJSON_URL, GEOJSON_PATH)
+    
+    # 5. Verify FFmpeg
     ffmpeg_path = verify_ffmpeg()
     
     return {
@@ -119,6 +124,7 @@ def setup_assets():
         "sfx": SFX_PATH,
         "sfx_pop": SFX_POP_PATH,
         "font": FONT_PATH,
+        "geojson": GEOJSON_PATH,
         "ffmpeg": ffmpeg_path
     }
 

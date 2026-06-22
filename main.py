@@ -24,7 +24,7 @@ from src.metadata_generator import generate_youtube_metadata
 from src.youtube_uploader import upload_video
 
 # Define ordered pipeline steps
-PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render", "thumbnail", "metadata", "upload"]
+PIPELINE_STEPS = ["assets", "news", "script", "tts", "footage", "render", "thumbnail", "metadata"]
 
 def load_state() -> dict:
     """Load the pipeline progress state from temp/state.json."""

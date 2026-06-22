@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -20,19 +20,55 @@ NEWS_DATA_PATH = os.path.join(TEMP_DIR, "news_data.json")
 SCRIPT_DATA_PATH = os.path.join(TEMP_DIR, "script_data.json")
 
 # Define Pydantic Schema for Structured Output
+class ChartPoint(BaseModel):
+    label: str = Field(description="The X-axis label (e.g. '2021', 'US', 'Q1').")
+    value: float = Field(description="The Y-axis numeric value.")
+
+class ClippingData(BaseModel):
+    source_name: str = Field(description="The name of the news source (e.g. 'Financial Times', 'Bloomberg', 'Reuters').")
+    headline: str = Field(description="A realistic news article headline related to this segment.")
+    highlight_text: str = Field(description="A key sentence from the simulated article body to be highlighted with a yellow marker.")
+
+class QuoteData(BaseModel):
+    author: str = Field(description="The name of the public figure being quoted (e.g. 'Jerome Powell', 'Joe Biden').")
+    author_title: str = Field(description="Their official title or role (e.g. 'Fed Chairman', 'US President').")
+    quote_text: str = Field(description="The exact or realistic quote text related to the segment content.")
+
+class StatData(BaseModel):
+    stat_value: str = Field(description="The prominent big number or metric value (e.g. '$85.40', '4,200+', '-15%').")
+    stat_label: str = Field(description="A short label describing what this metric represents (e.g. 'Oil Price per Barrel', 'New Sanctions').")
+
+class TimelineEvent(BaseModel):
+    time_label: str = Field(description="The year or time marker (e.g. '2015', '2018', 'Present').")
+    event_description: str = Field(description="A brief description of what occurred (3-6 words max).")
+
 class ScriptSegment(BaseModel):
     text: str = Field(
         description="The spoken voiceover script text for this short segment (1-2 sentences). Must be in English, professional, engaging, and flow logically into the next segment."
     )
     visual_type: str = Field(
-        description="The visual asset to show: 'footage' (Pexels stock video), 'chart' (data chart like bar or line chart), or 'map' (highlighting specific countries)."
+        description="The visual asset to show. MUST be one of: "
+                    "'footage' (Pexels stock video), "
+                    "'chart' (matplotlib data chart), "
+                    "'map' (highlighted GIS world map), "
+                    "'clipping' (newspaper headline clipping), "
+                    "'quote' (quote card of a public figure), "
+                    "'stat' (big number/metric card), "
+                    "or 'timeline' (chronology timeline)."
     )
     visual_keyword: str = Field(
-        description="Search keyword for stock video (e.g. 'cargo ship', 'factory', 'stock market') OR the country codes/data to display on the chart/map."
+        description="Search keyword for stock video OR target countries/terms to highlight/label."
     )
     sfx_trigger: bool = Field(
-        description="True if a transitional whoosh sound effect should play at the start of this segment, False otherwise. Use sparingly, only on major topic transitions."
+        description="True if a transitional whoosh or click sound effect should play at the start of this segment, False otherwise. Use sparingly, only on major topic transitions."
     )
+    
+    # Optional parameters depending on visual_type
+    chart_data: Optional[List[ChartPoint]] = Field(default=None, description="Required only if visual_type is 'chart'. Provide 4-6 data points.")
+    clipping_data: Optional[ClippingData] = Field(default=None, description="Required only if visual_type is 'clipping'.")
+    quote_data: Optional[QuoteData] = Field(default=None, description="Required only if visual_type is 'quote'.")
+    stat_data: Optional[StatData] = Field(default=None, description="Required only if visual_type is 'stat'.")
+    timeline_data: Optional[List[TimelineEvent]] = Field(default=None, description="Required only if visual_type is 'timeline'. Provide 3-4 chronological events.")
 
 class VideoScript(BaseModel):
     title: str = Field(description="A clickbait and SEO-friendly title for the video.")
@@ -62,7 +98,7 @@ def generate_script() -> dict:
             "music_mood": "suspenseful",
             "segments": [
                 {
-                    "text": "The global semiconductor industry is facing new geopolitical tensions as superpowers race to secure advanced chip supply chains.",
+                    "text": "This is The Strategic Brief — here's what you need to know about the escalating global chip war, and why it matters.",
                     "visual_type": "footage",
                     "visual_keyword": "semiconductor",
                     "sfx_trigger": True
@@ -80,7 +116,7 @@ def generate_script() -> dict:
                     "sfx_trigger": True
                 },
                 {
-                    "text": "However, constructing these highly advanced facilities takes years, meaning reliance on East Asia will remain high for the decade.",
+                    "text": "That's today's brief. If you want to stay ahead of the stories shaping global power and markets, subscribe to The Strategic Brief.",
                     "visual_type": "footage",
                     "visual_keyword": "cleanroom factory",
                     "sfx_trigger": False
@@ -107,16 +143,25 @@ def generate_script() -> dict:
     Instructions:
     1. The script must be in English, professional, analytical, and write in an engaging documentary storytelling style (similar to Vox, Johnny Harris, or Economics Explained).
     2. The script MUST follow a clear narrative structure:
-       - Segments 1-2 (Hook/Intro): Hook the viewer with a surprising fact or key question.
-       - Segments 3-5 (Core Explanation & Background): Introduce the core facts, using charts or maps to show historical context.
-       - Segments 6-8 (Geopolitical/Financial Implications): Explain what this means for the global markets and future.
-       - Segments 9-10 (Outro/Conclusion): Wrap up with a final takeaway or thought-provoking question, and invite viewers to subscribe.
+       - Segment 1 (Signature Opener): You MUST start the spoken script with this exact signature opener (replace [topic] with the main subject of the news, e.g. "the global chip war", "sanctions on Iran"):
+         "This is The Strategic Brief — here's what you need to know about [topic], and why it matters."
+       - Segments 2-3 (Hook/Intro continued): Hook the viewer further with a surprising fact or key question.
+       - Segments 4-6 (Core Explanation & Background): Introduce the core facts, using charts or maps to show historical context.
+       - Segments 7-8 (Geopolitical/Financial Implications): Explain what this means for the global markets and future.
+       - Last Segment (Signature Outro & CTA): You MUST end the spoken script with this exact signature outro line to encourage subscriptions:
+         "That's today's brief. If you want to stay ahead of the stories shaping global power and markets, subscribe to The Strategic Brief."
     3. Split the script into sequential segments. Each segment must have exactly 1-2 spoken sentences.
     4. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
-    5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map') and assign a matching visual_keyword:
-       - If 'footage': keyword must be a search term for stock video libraries (e.g. 'inflation', 'semiconductor', 'washington').
-       - If 'chart': keyword must represent what data is plotted (e.g. 'inflation rate line chart', 'oil price bar chart').
+    5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map', 'clipping', 'quote', 'stat', 'timeline') and assign a matching visual_keyword:
+       - If 'footage': keyword must be a search term for stock video libraries (e.g. 'inflation', 'semiconductor', 'washington'). First and last segments must be 'footage'.
+       - If 'chart': you MUST supply `chart_data` (4-6 realistic data points extracted from the article context).
        - If 'map': keyword must specify which countries/regions to highlight (e.g. 'US, China', 'Europe').
+       - If 'clipping': you MUST supply `clipping_data` (realistic headline, news source, and body highlight text).
+       - If 'quote': you MUST supply `quote_data` (famous quote or realistic statement from a key figure).
+       - If 'stat': you MUST supply `stat_data` (a big number and a short label).
+       - If 'timeline': you MUST supply `timeline_data` (3-4 chronological timeline events).
+       - Note: Use a diverse mix of visual types across the segments to keep the video highly dynamic and visually engaging!
+       - Note: Do NOT use the same visual_type in consecutive segments if possible.
     6. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
     7. Generate a very short, punchy `thumbnail_text` (3-5 words max) highlighting the core tension.
     8. Select the most appropriate background music mood for the video: 'suspenseful' (for trade/tech wars, conflict, geopolitical tension), 'ambient' (for neutral analysis, background, geography), 'motivational' (for growth, innovation, economic rise), or 'corporate' (for financial policies, business news).
