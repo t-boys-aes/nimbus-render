@@ -100,7 +100,7 @@ def upload_video():
             "categoryId": "22"  # People & Blogs
         },
         "status": {
-            "privacyStatus": "unlisted",  # Safe default to avoid instant public publishing before check
+            "privacyStatus": "public",  # Changed to public by user preference
             "selfDeclaredMadeForKids": False
         }
     }
