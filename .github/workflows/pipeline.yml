@@ -9,6 +9,8 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -52,3 +54,12 @@ jobs:
           SKIP_YOUTUBE_UPLOAD: ${{ secrets.SKIP_YOUTUBE_UPLOAD }}
         run: |
           python main.py
+
+      - name: Commit and Push Used Footage Log
+        if: steps.check-time.outputs.should_run == 'true' && always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add used_footage_log.json || echo "No used_footage_log.json found to add"
+          git commit -m "chore(footage): update used footage log [skip ci]" || echo "No changes to commit"
+          git push || echo "Git push failed (possibly no changes or write permission error)"
