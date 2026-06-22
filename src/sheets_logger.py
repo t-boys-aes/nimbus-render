@@ -13,7 +13,22 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Constants
-METADATA_PATH = os.path.join("temp", "youtube_metadata.json")
+TEMP_DIR = "temp"
+METADATA_PATH = os.path.join(TEMP_DIR, "youtube_metadata.json")
+
+HEADERS = [
+    "Date Created (Local)",
+    "Date Published (YouTube)",
+    "Video Title",
+    "Type",
+    "Caption / Description",
+    "YouTube Link",
+    "Video Link (Drive)",
+    "Thumbnail Link (Drive)",
+    "Script Link (Drive)",
+    "SRT Link (Drive)",
+    "Status"
+]
 
 def get_google_credentials():
     """Retrieve shared Google Credentials."""
@@ -36,70 +51,136 @@ def get_google_credentials():
         ]
     )
 
+def get_or_create_root_folder_id(drive) -> str:
+    """Resolve the root folder ID for 'The Strategic Brief'."""
+    root_id = os.environ.get("GDRIVE_FOLDER_ID")
+    if root_id and "your_gdrive" not in root_id and root_id.strip() != "":
+        return root_id
+    
+    # Search for it
+    query = "mimeType = 'application/vnd.google-apps.folder' and name = 'The Strategic Brief' and trashed = false"
+    try:
+        results = drive.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+        items = results.get('files', [])
+        if items:
+            return items[0]['id']
+            
+        # Create it if not found
+        file_metadata = {
+            'name': 'The Strategic Brief',
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        folder = drive.files().create(body=file_metadata, fields='id').execute()
+        new_id = folder.get('id')
+        logger.info(f"Created root folder 'The Strategic Brief' with ID: {new_id}")
+        return new_id
+    except Exception as e:
+        logger.error(f"Failed to resolve root folder ID: {e}")
+        raise e
+
 def get_or_create_spreadsheet(sheets, drive) -> str:
-    """Get the spreadsheet ID from env or search/create 'Nimbus Render Production Log' in GSheets."""
+    """Get the spreadsheet ID from env or search/create 'Nimbus Render Production Log' inside root folder."""
     spreadsheet_id = os.environ.get("GSHEET_SPREADSHEET_ID")
     
     # If explicitly configured and not placeholder
     if spreadsheet_id and "your_gsheet" not in spreadsheet_id and spreadsheet_id.strip() != "":
         logger.info(f"Using configured Google Spreadsheet ID: {spreadsheet_id}")
+        
+        # Ensure headers are correct
+        try:
+            sheets.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range="Sheet1!A1:K1",
+                valueInputOption="USER_ENTERED",
+                body={'values': [HEADERS]}
+            ).execute()
+        except Exception as e:
+            logger.warning(f"Could not verify or update headers in existing spreadsheet: {e}")
+            
         return spreadsheet_id
 
-    logger.info("GSHEET_SPREADSHEET_ID not set. Checking if spreadsheet 'Nimbus Render Production Log' exists in Drive...")
     try:
-        # Search for existing spreadsheet file
-        query = "mimeType = 'application/vnd.google-apps.spreadsheet' and name = 'Nimbus Render Production Log' and trashed = false"
+        root_id = get_or_create_root_folder_id(drive)
+        
+        # Search for existing spreadsheet file inside root folder
+        query = f"mimeType = 'application/vnd.google-apps.spreadsheet' and name = 'Nimbus Render Production Log' and '{root_id}' in parents and trashed = false"
         results = drive.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
         items = results.get('files', [])
         
         if items:
             existing_id = items[0]['id']
-            logger.info(f"Found existing Google Spreadsheet: '{items[0]['name']}' with ID: {existing_id}")
+            logger.info(f"Found existing Google Spreadsheet in root folder: '{items[0]['name']}' with ID: {existing_id}")
+            # Ensure headers are set
+            sheets.spreadsheets().values().update(
+                spreadsheetId=existing_id,
+                range="Sheet1!A1:K1",
+                valueInputOption="USER_ENTERED",
+                body={'values': [HEADERS]}
+            ).execute()
             return existing_id
             
-        # Create new spreadsheet programmatically
-        logger.info("Spreadsheet not found. Auto-creating Google Spreadsheet 'Nimbus Render Production Log'...")
-        spreadsheet_body = {
-            'properties': {
-                'title': 'Nimbus Render Production Log'
-            }
+        # Create new spreadsheet inside root folder
+        logger.info("Spreadsheet not found. Auto-creating Google Spreadsheet 'Nimbus Render Production Log' inside 'The Strategic Brief'...")
+        
+        spreadsheet_metadata = {
+            'name': 'Nimbus Render Production Log',
+            'mimeType': 'application/vnd.google-apps.spreadsheet',
+            'parents': [root_id]
         }
-        sheet_file = sheets.spreadsheets().create(body=spreadsheet_body, fields='spreadsheetId').execute()
-        new_id = sheet_file.get('spreadsheetId')
+        
+        sheet_file = drive.files().create(body=spreadsheet_metadata, fields='id').execute()
+        new_id = sheet_file.get('id')
         logger.info(f"Created spreadsheet successfully with ID: {new_id}")
         logger.info(f"👉 TIP: Salin spreadsheet ID ini ke berkas .env Anda: GSHEET_SPREADSHEET_ID={new_id}")
         
         # Initialize headers in Sheet1
-        header_values = [["Date (Local)", "Video Title", "YouTube Link", "GDrive Link", "Status"]]
-        body = {'values': header_values}
         sheets.spreadsheets().values().update(
             spreadsheetId=new_id,
-            range="Sheet1!A1",
+            range="Sheet1!A1:K1",
             valueInputOption="USER_ENTERED",
-            body=body
+            body={'values': [HEADERS]}
         ).execute()
-        logger.info("Initialized spreadsheet columns: Date, Title, YouTube Link, GDrive Link, Status.")
+        logger.info("Initialized spreadsheet columns.")
         return new_id
     except Exception as e:
         logger.error(f"Failed to resolve or create Google Spreadsheet: {e}")
         raise e
 
-def log_to_sheets(youtube_link: str = None, gdrive_link: str = None, status: str = "success"):
-    """Log video metadata, YouTube link, and Google Drive link to Google Sheets."""
-    # Read video title
+def log_to_sheets(youtube_link: str = None, gdrive_links: dict = None, status: str = "success"):
+    """Log video metadata, YouTube link, and all Google Drive links to Google Sheets."""
+    # Read video metadata
     video_title = "Untitled_Video"
+    video_description = ""
     if os.path.exists(METADATA_PATH):
         try:
             with open(METADATA_PATH, "r", encoding="utf-8") as f:
                 meta = json.load(f)
                 video_title = meta.get("title", video_title)
+                video_description = meta.get("description", "")
         except Exception as e:
-            logger.warning(f"Could not read metadata title for GSheets log: {e}")
+            logger.warning(f"Could not read metadata for GSheets log: {e}")
+
+    # Fallback for older calls passing single string
+    if isinstance(gdrive_links, str):
+        gdrive_links = {"video": gdrive_links}
+    elif gdrive_links is None:
+        # Try loading from JSON
+        links_json_path = os.path.join(TEMP_DIR, "gdrive_links.json")
+        if os.path.exists(links_json_path):
+            try:
+                with open(links_json_path, "r") as f:
+                    gdrive_links = json.load(f)
+            except:
+                gdrive_links = {}
+        else:
+            gdrive_links = {}
 
     creds = get_google_credentials()
     if not creds:
         logger.info("--- SIMULATED GOOGLE SHEETS LOGGING SUCCESSFUL ---")
-        logger.info(f"Log: [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] | Title: '{video_title}' | YT: {youtube_link} | Drive: {gdrive_link} | Status: {status}")
+        logger.info(f"Log: [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] | Title: '{video_title}' | Status: {status}")
+        logger.info(f"  - YouTube: {youtube_link}")
+        logger.info(f"  - Drive Links: {gdrive_links}")
         return
 
     try:
@@ -111,19 +192,31 @@ def log_to_sheets(youtube_link: str = None, gdrive_link: str = None, status: str
         spreadsheet_id = get_or_create_spreadsheet(sheets, drive)
         
         # Append log data row
-        date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Date Published is YouTube upload time or N/A
+        date_published = "N/A"
+        if youtube_link and youtube_link != "N/A" and "mock" not in youtube_link:
+            date_published = date_created
+            
         log_row = [[
-            date_str,
+            date_created,
+            date_published,
             video_title,
+            "Full Video",
+            video_description,
             youtube_link or "N/A",
-            gdrive_link or "N/A",
+            gdrive_links.get("video") or "N/A",
+            gdrive_links.get("thumbnail") or "N/A",
+            gdrive_links.get("script") or "N/A",
+            gdrive_links.get("srt") or "N/A",
             status.upper()
         ]]
         
         body = {'values': log_row}
         sheets.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
-            range="Sheet1!A:E",
+            range="Sheet1!A:K",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body=body
@@ -137,6 +230,15 @@ def log_to_sheets(youtube_link: str = None, gdrive_link: str = None, status: str
 if __name__ == "__main__":
     logger.info("Running standalone Google Sheets logger test...")
     try:
-        log_to_sheets(youtube_link="https://youtu.be/mock_id", gdrive_link="https://drive.google.com/mock_file", status="success")
+        log_to_sheets(
+            youtube_link="https://youtu.be/mock_id", 
+            gdrive_links={
+                "video": "https://drive.google.com/video",
+                "thumbnail": "https://drive.google.com/thumb",
+                "script": "https://drive.google.com/script",
+                "srt": "https://drive.google.com/srt"
+            }, 
+            status="success"
+        )
     except Exception as e:
         logger.error(f"Google Sheets test failed: {e}")

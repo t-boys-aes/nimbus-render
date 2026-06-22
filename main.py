@@ -79,15 +79,18 @@ def run_step(step_name: str, url_override: str = None) -> bool:
             with open(os.path.join(TEMP_DIR, "youtube_link.txt"), "w") as f:
                 f.write(youtube_link)
         elif step_name == "drive":
-            gdrive_link = upload_to_drive()
+            gdrive_links = upload_to_drive()
+            with open(os.path.join(TEMP_DIR, "gdrive_links.json"), "w") as f:
+                json.dump(gdrive_links, f, indent=4)
+            # Write fallback link for backwards compatibility
             with open(os.path.join(TEMP_DIR, "gdrive_link.txt"), "w") as f:
-                f.write(gdrive_link)
+                f.write(gdrive_links.get("video", ""))
         elif step_name == "sheets":
-            gdrive_link = ""
-            gdrive_link_path = os.path.join(TEMP_DIR, "gdrive_link.txt")
-            if os.path.exists(gdrive_link_path):
-                with open(gdrive_link_path, "r") as f:
-                    gdrive_link = f.read().strip()
+            gdrive_links = None
+            gdrive_links_path = os.path.join(TEMP_DIR, "gdrive_links.json")
+            if os.path.exists(gdrive_links_path):
+                with open(gdrive_links_path, "r") as f:
+                    gdrive_links = json.load(f)
                     
             youtube_link = ""
             youtube_link_path = os.path.join(TEMP_DIR, "youtube_link.txt")
@@ -95,7 +98,7 @@ def run_step(step_name: str, url_override: str = None) -> bool:
                 with open(youtube_link_path, "r") as f:
                     youtube_link = f.read().strip()
                     
-            log_to_sheets(youtube_link=youtube_link, gdrive_link=gdrive_link, status="success")
+            log_to_sheets(youtube_link=youtube_link, gdrive_links=gdrive_links, status="success")
             
         logger.info(f"STEP SUCCESS: {step_name.upper()}")
         return True
@@ -186,13 +189,26 @@ def main():
             pass
             
     # Read links
-    gdrive_link = ""
-    if os.path.exists(gdrive_link_path):
+    gdrive_links = None
+    gdrive_links_path = os.path.join(TEMP_DIR, "gdrive_links.json")
+    if os.path.exists(gdrive_links_path):
         try:
-            with open(gdrive_link_path, "r") as f:
-                gdrive_link = f.read().strip()
+            with open(gdrive_links_path, "r") as f:
+                gdrive_links = json.load(f)
         except:
             pass
+            
+    gdrive_video_link = ""
+    if gdrive_links:
+        gdrive_video_link = gdrive_links.get("video", "")
+    else:
+        # Fallback to single link if json is missing
+        if os.path.exists(gdrive_link_path):
+            try:
+                with open(gdrive_link_path, "r") as f:
+                    gdrive_video_link = f.read().strip()
+            except:
+                pass
             
     youtube_link = ""
     if os.path.exists(youtube_link_path):
@@ -205,17 +221,17 @@ def main():
     # If failure occurred, log to sheet as failed if sheets setup exists
     if error_occurred:
         try:
-            log_to_sheets(youtube_link=youtube_link, gdrive_link=gdrive_link, status="failed")
+            log_to_sheets(youtube_link=youtube_link, gdrive_links=gdrive_links, status="failed")
         except:
             pass
-
+ 
     # Send final report to Telegram
     notify_pipeline_status(
         pipeline_state=state,
         video_title=video_title,
         article_url=article_url,
         youtube_link=youtube_link,
-        gdrive_link=gdrive_link,
+        gdrive_link=gdrive_video_link,
         error_message=error_msg if error_occurred else ""
     )
     
