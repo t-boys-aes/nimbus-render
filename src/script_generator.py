@@ -226,9 +226,9 @@ def generate_script() -> dict:
          * "You're listening to The Strategic Brief — here is the story behind [topic], and why you should pay attention."
          * "On today's Strategic Brief: we dive into [topic] and why this development matters right now."
          Please select the opener that best fits the article.
-       - Segments 2-3 (Hook/Intro continued): Hook the viewer further with a surprising fact or key question.
-       - Segments 4-6 (Core Explanation & Background): Introduce the core facts, using charts or maps to show historical context.
-       - Segments 7-8 (Geopolitical/Financial Implications): Explain what this means for the global markets and future.
+       - Segments 2-4 (Hook/Intro continued): Hook the viewer further with a surprising fact, key question, or conflict setup.
+       - Segments 5-11 (Core Explanation & Background): Detail the core facts, timelines, and background analysis, using charts, maps, or clipping cards to illustrate.
+       - Segments 12-17 (Geopolitical/Financial Implications): Analyze the wider impact on global markets, trade, international relations, and future projections.
        - Last Segment (Signature Outro & CTA): Choose one of these signature outros to encourage subscriptions:
          * "That's today's brief. If you want to stay ahead of the stories shaping global power and markets, subscribe to The Strategic Brief."
          * "That concludes today's brief. To make sure you don't miss the next story shaping global finance and power, subscribe to The Strategic Brief."
@@ -236,7 +236,7 @@ def generate_script() -> dict:
          * "Thank you for listening to today's brief. Subscribe to The Strategic Brief to keep your finger on the pulse of global power and market dynamics."
          Please select the outro that best matches the final tone of the video.
     3. Split the script into sequential segments. Each segment must have exactly 1-2 spoken sentences.
-    4. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
+    4. The total script should be about 12 to 18 segments (~180 to 300 seconds total).
     5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map', 'clipping', 'quote', 'stat', 'timeline') and assign a matching visual_keyword.
        CRITICAL DESIGN RULES FOR VISUAL RATIOS:
        - At least 70% of the total segments MUST use 'footage' (Pexels/Pixabay stock video) to maintain a highly cinematic, realistic, and professional documentary feel.
