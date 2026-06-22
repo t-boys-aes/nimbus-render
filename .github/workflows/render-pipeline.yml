@@ -1,13 +1,13 @@
-name: Nimbus Render Pipeline
+name: Nimbus Render Pipeline (Render Only)
 
 on:
   schedule:
-    # Run every hour to check NY local time (Minute 0)
+    # Run every hour to check NY local midnight (Minute 0)
     - cron: '0 * * * *'
   workflow_dispatch: # Allow manual trigger from GitHub Actions UI anytime
 
 jobs:
-  run-pipeline:
+  render:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,18 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Check New York Local Time
+      - name: Check New York Local Midnight
         id: check-time
         run: |
-          # If manually triggered, always run the pipeline
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
             echo "Manual execution triggered. Skipping time check."
           else
-            python check_time.py
+            python check_time.py --mode render
           fi
 
-      - name: Run Pipeline
+      - name: Run Pipeline (Render Only)
         if: steps.check-time.outputs.should_run == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -53,13 +52,25 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SKIP_YOUTUBE_UPLOAD: ${{ secrets.SKIP_YOUTUBE_UPLOAD }}
         run: |
-          python main.py
+          python main.py --render-only
 
-      - name: Commit and Push State Logs
+      - name: Commit and Push State Logs (Pre-upload)
         if: steps.check-time.outputs.should_run == 'true' && always()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add used_footage_log.json used_news_log.json || echo "Log files not found to add"
-          git commit -m "chore(logs): update used footage and news state logs [skip ci]" || echo "No changes to commit"
+          git commit -m "chore(logs): update used footage and news state logs after render [skip ci]" || echo "No changes to commit"
           git push || echo "Git push failed (possibly no changes or write permission error)"
+
+      - name: Upload Render Artifacts
+        if: steps.check-time.outputs.should_run == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nimbus-render-assets
+          path: |
+            output/
+            temp/
+            used_news_log.json
+            used_footage_log.json
+          retention-days: 1

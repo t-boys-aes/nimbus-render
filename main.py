@@ -112,6 +112,8 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force run all steps from scratch")
     parser.add_argument("--step", type=str, choices=PIPELINE_STEPS, help="Run only a specific single step")
     parser.add_argument("--url", type=str, help="Manually override news sourcing with this specific article URL")
+    parser.add_argument("--render-only", action="store_true", help="Run only rendering steps (assets to drive)")
+    parser.add_argument("--upload-only", action="store_true", help="Run only uploading steps (upload and sheets)")
     
     args = parser.parse_args()
     
@@ -120,6 +122,13 @@ def main():
     gdrive_link_path = os.path.join(TEMP_DIR, "gdrive_link.txt")
     youtube_link_path = os.path.join(TEMP_DIR, "youtube_link.txt")
     
+    # Define steps to run based on modes
+    steps_to_run = PIPELINE_STEPS
+    if args.render_only:
+        steps_to_run = ["assets", "news", "script", "tts", "footage", "render", "thumbnail", "metadata", "drive"]
+    elif args.upload_only:
+        steps_to_run = ["upload", "sheets"]
+        
     # 1. Run single step override
     if args.step:
         logger.info(f"Single step manual execution triggered for: '{args.step}'")
@@ -148,7 +157,7 @@ def main():
     error_msg = ""
     
     try:
-        for step in PIPELINE_STEPS:
+        for step in steps_to_run:
             # If resuming and step was already successful, skip it
             if args.resume and state.get(step) == "success":
                 logger.info(f"Skipping already completed step: {step.upper()}")
