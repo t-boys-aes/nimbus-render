@@ -48,6 +48,8 @@ jobs:
             exit 1
           fi
           echo "Latest successful render run ID: $RUN_ID"
+          # Clean up existing files and directories to avoid extraction conflicts
+          rm -rf used_news_log.json used_footage_log.json output temp
           # Download and extract the artifacts directly to root directory
           gh run download $RUN_ID --name="nimbus-render-assets" --dir .
 
