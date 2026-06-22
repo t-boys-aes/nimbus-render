@@ -237,16 +237,19 @@ def generate_script() -> dict:
          Please select the outro that best matches the final tone of the video.
     3. Split the script into sequential segments. Each segment must have exactly 1-2 spoken sentences.
     4. The total script should be about 8 to 12 segments (~90 to 180 seconds total).
-    5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map', 'clipping', 'quote', 'stat', 'timeline') and assign a matching visual_keyword:
-       - If 'footage': keyword must be a search term for stock video libraries (e.g. 'inflation', 'semiconductor', 'washington'). First and last segments must be 'footage'.
+    5. For each segment, choose the most relevant visual_type ('footage', 'chart', 'map', 'clipping', 'quote', 'stat', 'timeline') and assign a matching visual_keyword.
+       CRITICAL DESIGN RULES FOR VISUAL RATIOS:
+       - At least 70% of the total segments MUST use 'footage' (Pexels/Pixabay stock video) to maintain a highly cinematic, realistic, and professional documentary feel.
+       - Limit programmatic visuals ('chart', 'map', 'clipping', 'quote', 'stat', 'timeline') to a maximum of 2 or 3 segments total per video. Use them only when absolutely necessary to highlight key data points, locations, or quotes.
+       - The first and last segments MUST be 'footage'.
+       - If 'footage': keyword must be a search term for stock video libraries (e.g. 'inflation', 'semiconductor', 'washington').
        - If 'chart': you MUST supply `chart_data` (4-6 realistic data points extracted from the article context).
        - If 'map': keyword must specify which countries/regions to highlight (e.g. 'US, China', 'Europe').
        - If 'clipping': you MUST supply `clipping_data` (realistic headline, news source, and body highlight text).
        - If 'quote': you MUST supply `quote_data` (famous quote or realistic statement from a key figure).
        - If 'stat': you MUST supply `stat_data` (a big number and a short label).
        - If 'timeline': you MUST supply `timeline_data` (3-4 chronological timeline events).
-       - Note: Use a diverse mix of visual types across the segments to keep the video highly dynamic and visually engaging!
-       - Note: Do NOT use the same visual_type in consecutive segments if possible.
+       - Do NOT use the same visual_type in consecutive segments if possible.
     6. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
     7. Generate a very short, punchy `thumbnail_text` (3-5 words max) highlighting the core tension.
     8. Select the most appropriate background music mood for the video: 'suspenseful' (for trade/tech wars, conflict, geopolitical tension), 'ambient' (for neutral analysis, background, geography), 'motivational' (for growth, innovation, economic rise), or 'corporate' (for financial policies, business news).

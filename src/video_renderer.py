@@ -523,7 +523,13 @@ def generate_timeline(timeline_data, out_path: str):
             w = bbox[2] - bbox[0]
         else:
             w = len(year) * 16
-        draw.text((x - w//2, line_y - 80), year, fill="#ffbe0b", font=year_font)
+            
+        text_x = x - w//2
+        if text_x < 50:
+            text_x = 50
+        elif text_x + w > VIDEO_WIDTH - 50:
+            text_x = VIDEO_WIDTH - 50 - w
+        draw.text((text_x, line_y - 80), year, fill="#ffbe0b", font=year_font)
         
         # Desc below
         desc = event.get("event_description", "")
@@ -535,7 +541,14 @@ def generate_timeline(timeline_data, out_path: str):
                 w = bbox[2] - bbox[0]
             else:
                 w = len(line) * 10
-            draw.text((x - w//2, curr_y), line, fill="#ffffff", font=desc_font)
+                
+            text_x = x - w//2
+            if text_x < 50:
+                text_x = 50
+            elif text_x + w > VIDEO_WIDTH - 50:
+                text_x = VIDEO_WIDTH - 50 - w
+                
+            draw.text((text_x, curr_y), line, fill="#ffffff", font=desc_font)
             curr_y += 30
             
     img.save(out_path)
