@@ -1,7 +1,17 @@
 import os
 import logging
 import requests
+from datetime import datetime
 from dotenv import load_dotenv
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    # Fallback for older python environments
+    from pytz import timezone
+    def ZoneInfo(name):
+        return timezone(name)
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -18,12 +28,25 @@ def send_telegram_message(message: str) -> bool:
         logger.warning("Telegram Bot Credentials missing or unconfigured. Notification will be skipped.")
         return False
 
+    # Determine if it is sleep time in WIB (22:00 to 07:00 WIB) to send silently
+    disable_notif = False
+    try:
+        wib_tz = ZoneInfo("Asia/Jakarta")
+        now_wib = datetime.now(wib_tz)
+        hour_wib = now_wib.hour
+        if hour_wib >= 22 or hour_wib < 7:
+            disable_notif = True
+            logger.info(f"Current time in WIB is {now_wib.strftime('%H:%M %Z')}. Enabling silent Telegram notification (disable_notification=True).")
+    except Exception as e:
+        logger.warning(f"Could not determine WIB timezone for silent notifications: {e}")
+
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": message,
         "parse_mode": "HTML",
-        "disable_web_page_preview": False
+        "disable_web_page_preview": False,
+        "disable_notification": disable_notif
     }
 
     try:
