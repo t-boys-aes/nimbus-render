@@ -70,9 +70,60 @@ class ScriptSegment(BaseModel):
     stat_data: Optional[StatData] = Field(default=None, description="Required only if visual_type is 'stat'.")
     timeline_data: Optional[List[TimelineEvent]] = Field(default=None, description="Required only if visual_type is 'timeline'. Provide 3-4 chronological events.")
 
+def get_google_suggestions(query: str) -> list:
+    """Fetch Google Autocomplete suggestions for a query string."""
+    import requests
+    import urllib.parse
+    encoded_query = urllib.parse.quote(query)
+    url = f"http://suggestqueries.google.com/complete/search?client=chrome&q={encoded_query}&hl=en"
+    try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if len(data) > 1 and isinstance(data[1], list):
+                return data[1]
+    except Exception as e:
+        logger.debug(f"Failed to fetch Google suggestions: {e}")
+    return []
+
+def get_seo_suggestions(title: str) -> list:
+    """Extract key terms from article title and fetch autocomplete suggestions from Google."""
+    import re
+    
+    # Clean title and remove common non-informative words
+    title_clean = re.sub(r'[^\w\s-]', '', title)
+    words = [w for w in title_clean.split() if w.lower() not in [
+        'a', 'an', 'the', 'how', 'why', 'what', 'to', 'for', 'of', 'in', 'on', 'with', 'and', 'or', 'is', 'are', 'was', 'were', 'could', 'would', 'new', 'could', 'should'
+    ]]
+    
+    suggestions = []
+    
+    # Try 1: First 2-3 significant keywords combined
+    if len(words) >= 2:
+        query = " ".join(words[:3])
+        suggestions.extend(get_google_suggestions(query))
+        
+    # Try 2: Find countries/entities in the title and query them
+    countries = ["us", "usa", "china", "taiwan", "russia", "ukraine", "iran", "europe", "germany", "japan", "india", "middle east"]
+    found_countries = [c for c in countries if c in title.lower()]
+    for c in found_countries[:2]:
+        suggestions.extend(get_google_suggestions(f"{c} geopolitics"))
+        suggestions.extend(get_google_suggestions(f"{c} news"))
+        
+    # Deduplicate and return top 12 suggestions
+    seen = set()
+    unique_suggestions = []
+    for s in suggestions:
+        s_lower = s.lower()
+        if s_lower not in seen:
+            seen.add(s_lower)
+            unique_suggestions.append(s)
+            
+    return unique_suggestions[:12]
+
 class VideoScript(BaseModel):
-    title: str = Field(description="A clickbait and SEO-friendly title for the video.")
-    description: str = Field(description="A short summary of the video with timestamps, credits, and hashtags.")
+    title: str = Field(description="A highly-clickable, curiosity-gap geopolitical/finance YouTube title (under 65 chars). MUST mention specific locations, key figures, or high-tension events (e.g. 'Why Taiwan's New Move Terrifies China', 'How the U.S. Quietly Outlawed Chinese Tech').")
+    description: str = Field(description="A short summary starting with a high-tension hook and a 2-sentence SEO summary. (Do NOT include timestamps, credits, or hashtags as they are appended automatically).")
     tags: List[str] = Field(description="A list of 5-8 SEO tags.")
     thumbnail_text: str = Field(description="A very short, punchy, high-contrast text overlay for the YouTube thumbnail (3-5 words max, e.g. 'CHIP WAR ECLIPSES US', 'IRAN OUTLAWED?').")
     music_mood: str = Field(description="The background music mood for the video. MUST be one of: 'suspenseful', 'ambient', 'motivational', or 'corporate'.")
@@ -132,6 +183,14 @@ def generate_script() -> dict:
     logger.info("Initializing Gemini API Client...")
     client = genai.Client(api_key=api_key)
 
+    # Fetch live Google autocomplete search suggestions
+    seo_keywords = []
+    try:
+        seo_keywords = get_seo_suggestions(news_data.get('title', ''))
+        logger.info(f"Fetched live SEO autocomplete keywords: {seo_keywords}")
+    except Exception as e:
+        logger.warning(f"Could not fetch SEO suggestions: {e}")
+
     # Prompt design for grounding
     prompt = f"""
     You are an expert geopolitical and finance video scriptwriter. Your goal is to write a highly engaging and educational video script based ONLY on the facts provided in the source article below. Do not invent new facts, make ungrounded claims, or exaggerate.
@@ -139,6 +198,9 @@ def generate_script() -> dict:
     Source Article Title: {news_data.get('title', 'Geopolitical News')}
     Source Article Content:
     {news_data.get('text', '')}
+
+    Live Google Search Trends/Keywords related to this topic:
+    {json.dumps(seo_keywords) if seo_keywords else "N/A"}
 
     Instructions:
     1. The script must be in English, professional, analytical, and write in an engaging documentary storytelling style (similar to Vox, Johnny Harris, or Economics Explained).
@@ -173,7 +235,18 @@ def generate_script() -> dict:
     6. Set `sfx_trigger` to true on the first segment and on major transition points (no more than 3-4 triggers in the entire video).
     7. Generate a very short, punchy `thumbnail_text` (3-5 words max) highlighting the core tension.
     8. Select the most appropriate background music mood for the video: 'suspenseful' (for trade/tech wars, conflict, geopolitical tension), 'ambient' (for neutral analysis, background, geography), 'motivational' (for growth, innovation, economic rise), or 'corporate' (for financial policies, business news).
-    9. Double check that all script claims match the source article text.
+    9. Generate a curiosity-gap, high-converting, and SEO-friendly title for the video:
+       - Avoid generic documentary titles (e.g. "The Semiconductor Supply Chain").
+       - Instead, write a high-converting, clickbait geopolitical title that is punchy, high-tension, and targets the curiosity gap (similar to Caspian Report, Johnny Harris, or Caspian Report titles).
+       - Examples of great titles:
+         * "Why Taiwan's New Move Terrifies China"
+         * "The Secret Energy Deal No One is Talking About"
+         * "Why Jerome Powell Just Triggered the Next Crisis"
+         * "How the U.S. Quietly Outlawed Chinese Tech"
+       - Make sure to incorporate trending terms or entities from the article (e.g., specific country names, leader names like Trump, Biden, Xi Jinping, or companies) and the provided live Google Search Trends where appropriate.
+       - The title MUST be under 65 characters so it is not truncated on YouTube.
+    10. Generate a description that starts with a high-tension hook sentence, followed by a concise 2-sentence SEO summary of the video. (The system will append chapters and credits automatically).
+    11. Double check that all script claims match the source article text.
     """
 
     models_to_try = ["gemini-3.5-flash", "gemini-3.1-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
