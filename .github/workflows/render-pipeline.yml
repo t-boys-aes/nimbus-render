@@ -2,8 +2,12 @@ name: Nimbus Render Pipeline (Render Only)
 
 on:
   schedule:
-    # Run every hour to check NY local midnight (Minute 0)
-    - cron: '0 * * * *'
+    # Cek tiap 15 menit, supaya dalam window 1 jam target ada 4 kesempatan
+    # trigger -- jauh lebih tahan terhadap delay/skip dari GitHub Actions
+    # scheduler dibanding cuma cek 1x per jam. Dedupe by date dihandle di
+    # check_time.py (last_run_state.json) supaya gak render berkali-kali
+    # dalam window jam yang sama.
+    - cron: '*/15 * * * *'
   workflow_dispatch: # Allow manual trigger from GitHub Actions UI anytime
 
 jobs:
@@ -55,12 +59,15 @@ jobs:
           python main.py --render-only
 
       - name: Commit and Push State Logs (Pre-upload)
-        if: steps.check-time.outputs.should_run == 'true' && always()
+        # always() penting di sini: last_run_state.json harus tetap
+        # ke-commit walau should_run == 'false', karena check_time.py
+        # menulis dedupe marker SEBELUM pipeline render dijalankan.
+        if: always()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add used_footage_log.json used_news_log.json || echo "Log files not found to add"
-          git commit -m "chore(logs): update used footage and news state logs after render [skip ci]" || echo "No changes to commit"
+          git add used_footage_log.json used_news_log.json last_run_state.json || echo "Log files not found to add"
+          git commit -m "chore(logs): update state logs after render check [skip ci]" || echo "No changes to commit"
           git pull --rebase origin master || echo "Rebase failed"
           git push || echo "Git push failed (possibly no changes or write permission error)"
 
