@@ -2,8 +2,10 @@ name: Nimbus Upload Pipeline (Upload Only)
 
 on:
   schedule:
-    # Run every hour to check NY local upload time (Minute 0)
-    - cron: '0 * * * *'
+    # Cek tiap 15 menit -- alasan sama seperti render-pipeline.yml.
+    # Target jam tetap dihitung di check_time.py (19:00 ET weekday,
+    # 12:00 ET weekend), dedupe by date supaya gak upload dobel.
+    - cron: '*/15 * * * *'
   workflow_dispatch: # Allow manual trigger from GitHub Actions UI anytime
 
 jobs:
@@ -72,11 +74,14 @@ jobs:
           python main.py --upload-only
 
       - name: Commit and Push State Logs (Post-upload)
-        if: steps.check-time.outputs.should_run == 'true' && always()
+        # always() penting di sini juga, dengan alasan sama: dedupe
+        # marker dari check_time.py harus ke-commit walau should_run
+        # == 'false' (yaitu di run-run yang cuma cek waktu lalu skip).
+        if: always()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add used_footage_log.json used_news_log.json || echo "Log files not found to add"
-          git commit -m "chore(logs): update used footage and news state logs after upload [skip ci]" || echo "No changes to commit"
+          git add used_footage_log.json used_news_log.json last_run_state.json || echo "Log files not found to add"
+          git commit -m "chore(logs): update state logs after upload check [skip ci]" || echo "No changes to commit"
           git pull --rebase origin master || echo "Rebase failed"
           git push || echo "Git push failed (possibly no changes or write permission error)"
